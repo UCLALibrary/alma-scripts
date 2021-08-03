@@ -1,0 +1,10 @@
+# Python stuff
+__pycache__
+
+# Data files
+*.json
+*.txt
+*.xml
+
+# API keys
+alma_api_keys.py
