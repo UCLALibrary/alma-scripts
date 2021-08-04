@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-
+"""
+Finds and runs an Alma job to export remote storage requests.
+See LICENSE.txt in this repository.
+"""
 import json
-import requests
+import requests # 3rd party module, requires installation
 import time
 
+# UCLA-specific API key management
 from alma_api_keys import API_KEYS
 
 BASE_URL = 'https://api-na.hosted.exlibrisgroup.com'
+# UCLA-specific API key
 API_KEY = API_KEYS['CAIA_INTERNAL']
 HEADERS = {'Authorization': f'apikey {API_KEY}',
            'Accept': 'application/json',
@@ -79,7 +84,7 @@ def run_job(job_id):
 	call_post_api(api, parameters, data)
 
 def main():
-	# Change profile_name as needed for search to work
+	# Change profile_name as needed for search to work in your Alma instance
 	profile_name = 'Caiasoft'
 	profile_id = get_profile_id(profile_name)
 	if (profile_id):
