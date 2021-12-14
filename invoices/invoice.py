@@ -115,6 +115,9 @@ class Invoice():
 		inv_line['pac_tax_code'] = self._get_pac_tax_code(inv_line)
 		inv_line['description'] = self._get_description(inv_line)
 		inv_line['fund_count'] = len(inv_line['fund_info'])
+		# Set PAC FAU info
+		for fund in inv_line['fund_info']:
+			fund['pac_fau'] = self._get_pac_fau(fund['fau'])
 
 	def _make_tsh_lines(self):
 		# Find any ESH line(s) and split them into ESH/TSH lines
@@ -216,7 +219,7 @@ class Invoice():
 		fund = {}
 		fund['usd_amount'] = Decimal(self._get_value(xml, 'local_amount/sum', ns))
 		fund['fau'] = self._get_value(xml, 'external_id', ns)
-		fund['pac_fau'] = self._get_pac_fau(fund['fau'])
+#		fund['pac_fau'] = self._get_pac_fau(fund['fau'])
 		fund['fund_code'] = self._get_value(xml, 'code', ns)
 		fund['fund_name'] = self._get_value(xml, 'name', ns)
 		return fund
@@ -238,6 +241,8 @@ class Invoice():
 			value = value.replace('*', ' ').replace('_', ' ')
 			# Non-ASCII quotes
 			value = value.replace('’', '\'')
+			# Long unicode hyphen shows up sometimes
+			value = value.replace(u'\u2013', '-')
 		return value
 
 	def _get_blanks(self, num):
@@ -347,8 +352,8 @@ class Invoice():
 		project = fau[26:32]
 		# Project must be 6 characters; right-pad with blanks, up to 6
 		project = project.ljust(6, ' ')
-		# Source is always 6 blanks
-		source = self._get_blanks(6)
+		# Source was 6 blanks; LBS wants char 4-9 (1-based) of the unique identifier in hopes of a useful PAC identifier.
+		source = self.data['unique_identifier'][3:9]
 		return loc + account + cc + fund + project + sub + obj + source
 	
 	def _to_date(self, alma_date):
