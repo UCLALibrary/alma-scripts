@@ -347,8 +347,8 @@ class Invoice():
 		project = fau[26:32]
 		# Project must be 6 characters; right-pad with blanks, up to 6
 		project = project.ljust(6, ' ')
-		# Source is always 6 blanks
-		source = self._get_blanks(6)
+		# Source was 6 blanks; LBS wants char 4-9 (1-based) of the unique identifier in hopes of a useful PAC identifier.
+		source = self.data['unique_identifier'][3:9]
 		return loc + account + cc + fund + project + sub + obj + source
 	
 	def _to_date(self, alma_date):
