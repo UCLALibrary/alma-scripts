@@ -24,7 +24,7 @@ def _inject_test_number(invoice, test_batch):
 	invoice.data['pac_lines'] = invoice._get_pac_lines()
 
 def main():
-	PROD = False
+	PROD = True
 	xml_file = sys.argv[1]
 	pac_file = _get_pac_filename()
 	if os.path.exists(pac_file):

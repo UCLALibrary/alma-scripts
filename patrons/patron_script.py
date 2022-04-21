@@ -1,18 +1,142 @@
 import ast
 import csv
+import hashlib
+import json
 import sys
 import pprint as pp
-from xml.sax.saxutils import escape
 
 # Long XML formatting routines for this project
 import patron_xml_template as patron_xml
-# experiment
+# experiments
 from collections import Counter
 
-def get_registrar_data():
+def main():
+	data_files = _get_filenames()
+	patrons = _get_patrons(data_files)
+	print(f'Merged patrons: {len(patrons)}')
+
+	# Remove patrons whose current UCLA data is identical to previous saved data.
+	for ucla_uid, patron in patrons.items():
+		# testing... not yet implemented
+		print(f'HASH: {ucla_uid}, {_get_hash(patron)}')
+
+	# Finally, write file of XML for load into Alma.
+	values = [patrons[uid]['USER_GROUP'] for uid in patrons]
+	pp.pprint(Counter(values))
+	patron_xml.write_xml(patrons)
+
+def _get_filenames():
+	# Multiple files of campus data, to be combined in various ways.
+	# Names should be consistent, set by separate retrieval script.
+	return {
+		'bruincard_file': 'bruincard_data.txt',
+		'fsemail_file': 'fsemail_data.txt',
+		'registrar_file': 'registrar_data.txt',
+		'ucpath_file': 'ucpath_data.txt',
+	}
+
+def _get_patrons(data_files):
+	employees = _get_employees(data_files)
+	students = _get_students(data_files)
+	# Testing
+	# for ucla_uid in employees.keys():
+	# 	if ucla_uid in students:
+	# 		print(f'Notice: {ucla_uid} is in both')
+
+	# Merge students into employees, keeping student data when patrons are in both groups.
+	# Python 3.9 merge operator
+	patrons = employees | students
+
+	bruincard_data = _get_bruincard_data(data_files['bruincard_file'])
+	# Add current barcodes for all patrons, where one exists
+	for ucla_uid in patrons.keys():
+		if ucla_uid in bruincard_data:
+			patrons[ucla_uid]['BARCODE'] = bruincard_data.get(ucla_uid)
+		else:
+			#print(f'No barcode found for {ucla_uid}')
+			patrons[ucla_uid]['BARCODE'] = None
+
+	return patrons
+
+def _get_employees(data_files):
+	fsemail_data = _get_fsemail_data(data_files['fsemail_file'])
+	ucpath_data = _get_ucpath_data(data_files['ucpath_file'])	
+	# Add email address from fsemail to ucpath patrons lacking email, where possible.
+	for ucla_uid, patron in ucpath_data.items():
+		if patron['EMAIL_ADDRESS'] is None and ucla_uid in fsemail_data:
+			# fsemail_data contains only patrons with email addresses
+			ucpath_data[ucla_uid]['EMAIL_ADDRESS'] = fsemail_data[ucla_uid]
+			#print(f'Notice: Added email to ucpath_data for {ucla_uid}')
+	return ucpath_data
+
+def _get_students(data_files):
+	registrar_data = _get_registrar_data(data_files['registrar_file'])
+	return registrar_data
+
+def _get_fsemail_data(fsemail_file):
+	fsemail_data = {}
+	# Some unexpected data - 0xa0 nonbreaking spaces, not utf-8 or ascii or proper utf-16.
+	# Ignoring errors seems safe and correct.
+	with open(fsemail_file, errors='ignore') as f:
+		# TODO: Investigate why f.readlines() here includes extra line breaks; make consistent through script
+		lines = f.read().splitlines()
+		for line in lines:
+			# Each line represents data for one employee.
+			# Fixed format, with some header lines which start with * - ignore these
+			if not line.startswith('*'):
+				ucla_uid = line[0:9].strip()
+				email_address = line[44:94].strip()
+				if ucla_uid != '' and email_address != '':
+					fsemail_data[ucla_uid] = email_address
+	print(f'fsemail_data: {len(fsemail_data)}')
+	return fsemail_data
+
+def _get_ucpath_data(ucpath_file):
+	ucpath_data = {}
+
+	with open(ucpath_file) as f:
+		lines = f.readlines()
+		for line in lines:
+			# Each line represents data for one employee.
+			# Dictionary from SQL query, not json, not pickle-compatible.
+			employee = ast.literal_eval(line)
+			# UC Path uses a single space instead of empty string; other strings appear to be unpadded
+			for key, val in employee.items():
+				if val == ' ':
+					employee[key] = ''
+
+			# Get just the data needed for Alma updates, renaming for consistency with student data
+			primary_id = employee['employee_id']
+			patron = {
+				'PRIMARY_ID': primary_id,
+				'FIRST_NAME': employee['emp_first_name'],
+				'MIDDLE_NAME': employee['emp_middle_name'],
+				'LAST_NAME': employee['emp_last_name'],
+				'EMAIL_ADDRESS': employee['email_addr'],
+				# These are called work addresses
+				'ADDRESS_LINE1': employee['work_addr_line1'],
+				'ADDRESS_LINE2': employee['work_addr_line2'],
+				'ADDRESS_CITY': employee['work_addr_city'],
+				'ADDRESS_STATE_PROVINCE': employee['work_addr_state'],
+				'ADDRESS_POSTAL_CODE': employee['work_addr_zip'],
+				# UC Path data currently does not include country; assume USA
+				'ADDRESS_COUNTRY': 'USA',
+				'PHONE_NUMBER': employee['campus_phone'],
+				'EMPLOYEE_TYPE': employee['type'],
+				'IS_LAW': employee['law'],
+			}
+			# UC Path doesn't have full name, so assemble it
+			patron['FULL_NAME'] = _get_full_name(patron)
+			# User group
+			patron['USER_GROUP'] = _get_employee_user_group(patron)
+			ucpath_data[primary_id] = patron
+	print(f'ucpath_data: {len(ucpath_data)}')
+	return ucpath_data
+
+def _get_registrar_data(registrar_file):
 	registrar_data = {}
 
-	with open('registrar_data.txt') as f:
+	with open(registrar_file) as f:
 		lines = f.readlines()
 		for line in lines:
 			# Each line represents data for one student.
@@ -28,30 +152,31 @@ def get_registrar_data():
 			primary_id = student['STU_ID']
 			patron = {
 				'PRIMARY_ID': primary_id,
-				'FULL_NAME': escape(student['STU_NM']),
+				'FULL_NAME': student['STU_NM'],
 				'CAREER_REAL': student['CAREER'],
 				'CAREER': student['CAREER'][0],
 				'CLASS': student['CLASS'],
 				'DEGREE': student['DEG_CD'],
 				'DEPT': student['SR_DEPT_CD'],
 				'DIVISION': student['SR_DIV_CD'],
-				'EMAIL_ADDRESS': escape(student['SS_EMAIL_ADDR']),
+				'EMAIL_ADDRESS': student['SS_EMAIL_ADDR'],
 				'HONORS_REAL': student['HONORS'],
 				'HONORS': student['SP_PGM2'],
 			}
 			# Registrar has address data which needs remapping for Alma
-			patron.update(get_student_address(student))
+			patron.update(_get_student_address(student))
 			# Registrar has just 'UNITED' for USA; change to USA
 			patron['ADDRESS_COUNTRY'] = 'USA' if patron['ADDRESS_COUNTRY'] == 'UNITED' else patron['ADDRESS_COUNTRY']
 			# Registrar provides just full name; add name parts
-			patron.update(split_patron_name(patron['FULL_NAME']))
+			patron.update(_split_patron_name(patron['FULL_NAME']))
 			# User group
-			patron['USER_GROUP'] = get_user_group(patron)
+			patron['USER_GROUP'] = _get_student_user_group(patron)
 
 			registrar_data[primary_id] = patron
+	print(f'registrar_data: {len(registrar_data)}')
 	return registrar_data
 
-def get_bruincard_data():
+def _get_bruincard_data(bruincard_file):
 	bruincard_data = {}
 	with open('bruincard_data.txt') as f:
 		# CSV file, mostly... multiple types of record, with different number of fields.
@@ -64,9 +189,10 @@ def get_bruincard_data():
 				bc_existing = bruincard_data.get(ucla_uid, '0')
 				if barcode > bc_existing:
 					bruincard_data[ucla_uid] = barcode
+	print(f'bruincard_data: {len(bruincard_data)}')
 	return bruincard_data
 
-def get_student_address(student):
+def _get_student_address(student):
 	# Registrar provides 2 addresses / phones, local (M_) and permanent (P_).
 	# Most students have only local data released for use.
 	# If student has local address line 1, use local; else use permanent.
@@ -92,13 +218,10 @@ def get_student_address(student):
 			'ADDRESS_COUNTRY': student['P_CNTRY7'],
 			'PHONE_NUMBER': student['P_PHONE_NO'],
 		}
-	# Addresses can have unsafe-for-xml characters
-	for key, val in address.items():
-		address[key] = escape(val)
 
 	return address
 
-def split_patron_name(full_name):
+def _split_patron_name(full_name):
 	"""
 		Splits combined 'LAST, FIRST MIDDLE...' into 3 values in a dictionary.
 		MIDDLE may contain multiple terms in one string;
@@ -124,9 +247,12 @@ def split_patron_name(full_name):
 	}
 	return names
 
-def get_user_group(patron):
-	# Currently handles students only
-	# TODO: Add non-students
+def _get_full_name(patron):
+	# Combined first/middle/last names into 'LAST, FIRST MIDDLE'
+	return f"{patron['LAST_NAME']}, {patron['FIRST_NAME']} {patron['MIDDLE_NAME']}".strip()
+
+def _get_student_user_group(patron):
+	# Handles students only, as data is much different than employees.
 	# Order of evaluation matters!
 
 	# Music grads: dept values have changed... 1st 4 legacy, no data; last 3 have data now
@@ -157,45 +283,40 @@ def get_user_group(patron):
 
 	return user_group
 
-def main():
-	xml_file = sys.argv[1]
-	
-	# Students only, for now
-	registrar_data = get_registrar_data()
-	bruincard_data = get_bruincard_data()
+def _get_employee_user_group(patron):
+	# Handles employees only, as data is much different than students.
+	# EMPLOYEE_TYPE and IS_LAW are integers.
+	# Order of evaluation matters!
 
-	# Registrar data is the primary source for students.
-	# Add barcode from bruincard data, if it exists.
-	for ucla_uid in registrar_data.keys():
-		if ucla_uid in bruincard_data:
-			registrar_data[ucla_uid]['BARCODE'] = bruincard_data.get(ucla_uid)
-		else:
-			print(f'No barcode found for {ucla_uid}')
-			registrar_data[ucla_uid]['BARCODE'] = None
+	# Academic (law)
+	if patron['EMPLOYEE_TYPE'] == 4 and patron['IS_LAW'] == 1:
+		user_group = 'UAL'
+	# Academic (regular)
+	elif patron['EMPLOYEE_TYPE'] == 4 and patron['IS_LAW'] == 0:
+		user_group = 'UA'
+	# Grad student (law)
+	elif patron['EMPLOYEE_TYPE'] == 3 and patron['IS_LAW'] == 1:
+		user_group = 'UGL'
+	# Grad student (regular)
+	elif patron['EMPLOYEE_TYPE'] == 3 and patron['IS_LAW'] == 0:
+		user_group = 'UG'
+	# Staff (law)
+	elif patron['EMPLOYEE_TYPE'] == 1 and patron['IS_LAW'] == 1:
+		user_group = 'USL'
+	# Staff (regular)
+	elif patron['EMPLOYEE_TYPE'] == 1 and patron['IS_LAW'] == 0:
+		user_group = 'US'
+	# Unknown / errors, so set a value which will make Alma reject the record
+	else:
+		user_group = 'UNKNOWN'
 
-	# 505433166: In registrar, not in bruincard [FIXED 20220328]
-	#pp.pprint(registrar_data['505433166'])
-	# 905879848: In registrar and in bruincard
-	#pp.pprint(registrar_data['905879848'])
-	# 205725086 has only perm address
-	#pp.pprint(registrar_data['205725086'])
-	# 000429412 has P/PR career/class... via lib_resident SP called by java registrar program
-	#pp.pprint(registrar_data['000429412'])
-	# 005136507 has honors... not via HONORS but via SP_PGM2...
-	#pp.pprint(registrar_data['005136507'])
+	return user_group
 
-	#values = [registrar_data[uid]['DEPT'] for uid in registrar_data]
-	#pp.pprint(Counter(values))
-
-	#print(len(registrar_data))
-
-	# Supposedly post-docs; waiting for clarification from SAIT and UAS
-	# p_pr = ['000429412', '003248116', '104235235', '105271608', '105091438', '105263123', '105263420', '105469746', '203150811', '105648748', '205291328', '203980437', '205465597', '205542893', '205429316', '305078110', '205868754', '302651093', '304307113', '304375625', '305461594', '305648733', '404819189', '404885264', '405063660', '405850772', '504544279', '505053854', '505065079', '505628282', '505458128', '604096784', '604947893', '605262814', '604389254', '605461738', '605648661', '605649910', '703761135', '704307093', '605868733', '705461733', '705648627', '705648665', '705648750', '804691650', '803678522', '804819795', '804883692', '804947991', '705849150', '804383920', '805648735', '904819498', '904374802', '904375024', '905260465']
-	# for ucla_uid in registrar_data.keys():
-	# 	if ucla_uid in p_pr:
-	# 		pp.pprint(registrar_data[ucla_uid])
-
-	patron_xml.write_xml(registrar_data, xml_file)
+def _get_hash(patron):
+	# Hash the patron dictionary, so it can be stored and compared with future runs
+	# to identify patrons whose campus data has not changed.
+	encoded = json.dumps(patron, sort_keys=True).encode()
+	return hashlib.sha1(encoded).hexdigest()
 
 if __name__ == '__main__':
 	main()

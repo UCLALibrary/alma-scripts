@@ -2,9 +2,19 @@
 __pycache__
 
 # Data files
+*.csv
+*.dict
 *.json
+*.lst
+*.out
+*.tsv
 *.txt
 *.xml
+*.zip
+LIBRY-APINTRFC.*
 
-# API keys
+# API keys and other secrets
 alma_api_keys.py
+*credentials*
+*secret*
+*password*

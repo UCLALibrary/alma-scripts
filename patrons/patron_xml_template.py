@@ -1,14 +1,19 @@
 # Routines for converting patron dictionaries to the XML Alma requires.
 from datetime import date, timedelta
+from xml.sax.saxutils import escape
 
 def get_expiry_date():
-	# About 7 months from today - close enough.
+	# About 13 months from today - close enough, no need for day-of-month precision here.
 	# Format as 'YYYY-MM-DD'
-	expiry_date = date.today() + timedelta(days=7*30)
+	expiry_date = date.today() + timedelta(days=round(13*365/12))
 	return expiry_date.strftime('%Y-%m-%d')
 
-# Use only one consistent expiry date
+# Use only one consistent expiry date; this is relevant only in the XML for Alma.
 EXPIRY_DATE = get_expiry_date()
+# Use consistent status date of today
+STATUS_DATE = date.today().strftime('%Y-%m-%d')
+# Use consistent purge date, currently 2036-12-31
+PURGE_DATE = '2036-12-31'
 
 def get_patron_xml(patron):
 	"""Returns a string of XML with patron data embedded"""
@@ -31,13 +36,13 @@ def get_patron_xml(patron):
 	<cataloger_level>00</cataloger_level>
 	<preferred_language>en</preferred_language>
 	<expiry_date>{EXPIRY_DATE}Z</expiry_date>
-	<purge_date>2036-12-31Z</purge_date>
+	<purge_date>{PURGE_DATE}Z</purge_date>
 	<account_type>EXTERNAL</account_type>
 	<external_id>SIS_temp</external_id>
 	<password></password>
 	<force_password_change></force_password_change>
 	<status>ACTIVE</status>
-	<status_date>2022-01-01Z</status_date>
+	<status_date>{STATUS_DATE}Z</status_date>
 	<pref_first_name></pref_first_name>
 	<pref_middle_name></pref_middle_name>
 	<pref_last_name></pref_last_name>
@@ -119,19 +124,24 @@ def get_emails(patron):
 
 def get_barcodes(patron):
 	# Just one barcode for now
-	xml_string = f'''\
-	<user_identifiers>
-		<user_identifier segment_type="External">
-			<id_type>BARCODE</id_type>
-			<value>{patron['BARCODE']}</value>
-			<note></note>
-			<status>ACTIVE</status>
-		</user_identifier>
-	</user_identifiers>
+	# Skip this if no barcode.
+	xml_string = ''
+	if patron.get('BARCODE') is not None:
+		xml_string = f'''\
+		<user_identifiers>
+			<user_identifier segment_type="External">
+				<id_type>BARCODE</id_type>
+				<value>{patron['BARCODE']}</value>
+				<note></note>
+				<status>ACTIVE</status>
+			</user_identifier>
+		</user_identifiers>
 '''
 	return xml_string
 
-def write_xml(patrons, xml_file):
+def write_xml(patrons):
+	# Constant name.  Existing file will be replaced.
+	xml_file = 'alma_patrons.xml'
 	with open(xml_file, 'w+t') as xml:
 		header = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
 		list_start = '<users>\n'
@@ -139,10 +149,11 @@ def write_xml(patrons, xml_file):
 
 		xml.write(header)
 		xml.write(list_start)
-			#if ucla_uid in ('505433166', '905879848', '205725086', '000429412', '005136507'):
-		for ucla_uid in patrons:
-			patron = patrons[ucla_uid]
-			print(f'{ucla_uid}: {patron["FULL_NAME"]}')
+		for ucla_uid, patron in patrons.items():
+			# Campus data can have unsafe-for-xml characters; escape strings for xml
+			for key, val in patron.items():
+				if isinstance(val, str):
+					patron[key] = escape(val)
 			xml.write(get_patron_xml(patron))
 		# Outside the patron loop
 		xml.write(list_end)
