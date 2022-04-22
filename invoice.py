@@ -112,6 +112,9 @@ class Invoice():
 		inv_line['pac_tax_code'] = self._get_pac_tax_code(inv_line)
 		inv_line['description'] = self._get_description(inv_line)
 		inv_line['fund_count'] = len(inv_line['fund_info'])
+		# Set PAC FAU info
+		for fund in inv_line['fund_info']:
+			fund['pac_fau'] = self._get_pac_fau(fund['fau'])
 
 	def _make_tsh_lines(self):
 		# Find any ESH line(s) and split them into ESH/TSH lines
@@ -214,7 +217,7 @@ class Invoice():
 		fund = {}
 		fund['usd_amount'] = Decimal(self._get_value(xml, 'local_amount/sum', ns))
 		fund['fau'] = self._get_value(xml, 'external_id', ns)
-		fund['pac_fau'] = self._get_pac_fau(fund['fau'])
+#		fund['pac_fau'] = self._get_pac_fau(fund['fau'])
 		fund['fund_code'] = self._get_value(xml, 'code', ns)
 		fund['fund_name'] = self._get_value(xml, 'name', ns)
 		return fund
