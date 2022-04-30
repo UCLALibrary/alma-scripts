@@ -4,6 +4,7 @@ from alma_api_keys import API_KEYS
 from datetime import datetime
 from invoice import Invoice
 from sftp_credentials import ALMA, PAC
+import argparse
 import os
 import sys # for exit() while testing
 import pprint as pp
@@ -126,7 +127,7 @@ def _inject_test_number(invoice, test_batch):
 	invoice.data['pac_invoice_number']= invoice._format_invoice_number()
 	invoice.data['pac_lines'] = invoice._get_pac_lines()
 
-def create_pac_invoices(xml_file):
+def create_pac_invoices(xml_file, dump_dict):
 	PROD = True
 	pac_file = _get_pac_filename()
 	if os.path.exists(pac_file):
@@ -140,13 +141,15 @@ def create_pac_invoices(xml_file):
 			invoice = Invoice(alma_invoice, ns)
 			#####_inject_test_number(invoice, '-2')
 
+			if dump_dict:
+				invoice.dump()
+
 			if PROD:
 				if invoice.is_valid():
 					_write_invoice_to_file(invoice.get_pac_format(), pac_file)
 			else:
 				# TODO: Changes to is_valid()
 				invoice.is_valid()
-				invoice.dump()
 			# TODO: Real logging
 			print(invoice.data['validation_message'])
 
@@ -157,7 +160,7 @@ def create_pac_invoices(xml_file):
 
 	return pac_file
 
-def main():
+def get_xml_from_alma():
 	global client
 	client = Alma_Api_Client(API_KEYS['DIIT_SCRIPTS'])
 	profile_id = get_invoice_profile_id()
@@ -172,14 +175,30 @@ def main():
 	# If no invoices exported, no file is created; otherwise file is
 	# {instance_id}-some_data.xml
 	xml_file = retrieve_alma_file(instance_id)
+	return xml_file
 
-	if xml_file is not None:
-		# Creates PAC file and returns its name
-		pac_file = create_pac_invoices(xml_file)
-		# Upload PAC file to their sftp server
-		upload_pac_file(pac_file)
+def main():
+	parser = argparse.ArgumentParser()
+	parser.add_argument('-d', '--dump_invoice', help='Dump invoice as dictionary', action='store_true')
+	parser.add_argument('-s', '--skip_upload', help='Skip PAC upload', action='store_true')
+	parser.add_argument('-x', '--xml_file', help='XML file to process', default=None)
+	args = parser.parse_args()
+
+	# If xml_file is passed via command-line, use it;
+	# otherwise, extract Alma invoices and retrieve xml_file from server.
+	if args.xml_file is None:
+		xml_file = get_xml_from_alma()
 	else:
-		print('No Alma invoice data - no upload to PAC')
+		xml_file = args.xml_file
+
+	# Creates PAC file and returns its name
+	pac_file = create_pac_invoices(xml_file, args.dump_invoice)
+
+	# Upload PAC file to UCLA ITS sftp server
+	if args.skip_upload:
+		print(f'{pac_file} NOT uploaded')
+	else:
+		upload_pac_file(pac_file)
 
 if __name__ == '__main__':
 	main()
