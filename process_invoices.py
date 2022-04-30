@@ -198,7 +198,10 @@ def main():
 	if args.skip_upload:
 		print(f'{pac_file} NOT uploaded')
 	else:
-		upload_pac_file(pac_file)
+		if os.path.exists(pac_file):
+			upload_pac_file(pac_file)
+		else:
+			print(f'{pac_file} does not exist')
 
 if __name__ == '__main__':
 	main()
