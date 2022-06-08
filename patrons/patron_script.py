@@ -44,8 +44,10 @@ def _get_patrons(data_files):
 	# 		print(f'Notice: {ucla_uid} is in both')
 
 	# Merge students into employees, keeping student data when patrons are in both groups.
-	# Python 3.9 merge operator
-	patrons = employees | students
+	# Python 3.9 merge operator - not supported on exlsupport server 3.8...
+	#patrons = employees | students
+	# Python < 3.9 merge
+	patrons = {**employees, **students}
 
 	bruincard_data = _get_bruincard_data(data_files['bruincard_file'])
 	# Add current barcodes for all patrons, where one exists
