@@ -56,8 +56,9 @@ class Invoice:
             valid = False
 
         # Some of these are created by LBS, some not
+        invoice_ref_number = self.data["invoice_ref_num"]
         for prefix in unwanted_prefixes:
-            if invoice_number.startswith(prefix):
+            if invoice_ref_number == prefix:
                 validation_message = f"Unwanted prefix: {prefix}"
                 valid = False
                 break
@@ -171,6 +172,7 @@ class Invoice:
         data["currency"] = self._get_value(xml, "invoice_amount/currency", ns)
         data["invoice_date"] = self._to_date(self._get_value(xml, "invoice_date", ns))
         data["invoice_number"] = self._get_value(xml, "invoice_number", ns)
+        data["invoice_ref_num"] = self._get_value(xml, "invoice_ref_num", ns)
         data["total_amount_alma"] = Decimal(
             self._get_value(xml, "invoice_amount/sum", ns)
         )
