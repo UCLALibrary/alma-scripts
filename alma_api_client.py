@@ -119,6 +119,10 @@ class Alma_Api_Client:
         api = f"/almaws/v1/analytics/paths/{path}"
         return self._call_get_api(api, parameters)
 
-    def get_vendor(self, parameters={}):
+    def get_vendors(self, parameters={}):
         api = "/almaws/v1/acq/vendors"
+        return self._call_get_api(api, parameters)
+
+    def get_vendor(self, vendor_code, parameters={}):
+        api = f"/almaws/v1/acq/vendors/{vendor_code}"
         return self._call_get_api(api, parameters)
