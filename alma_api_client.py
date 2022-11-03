@@ -110,8 +110,7 @@ class Alma_Api_Client:
 
     def get_analytics_report(self, parameters={}):
         # Docs say to URL-encode report name (path);
-        # they lie, or request lib is doing it automatically?
-        # path: /shared/University of California Los Angeles (UCLA) 01UCS_LAL/Reports/RAMS/Cataloging Statistics
+        # request lib is doing it automatically.
         api = "/almaws/v1/analytics/reports"
         return self._call_get_api(api, parameters)
 
