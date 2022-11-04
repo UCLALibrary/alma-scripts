@@ -12,11 +12,7 @@ class Alma_Api_Client:
             "Content-Type": "application/json",
         }
 
-    def _call_get_api(self, api: str, parameters: dict = None) -> dict:
-        if parameters is None:
-            parameters = {}
-        get_url = self.BASE_URL + api
-        response = requests.get(get_url, headers=self.HEADERS, params=parameters)
+    def _get_api_data(self, response: requests.Response) -> dict:
         api_data: dict = response.json()
         # Add a few response elements caller can use
         api_data["api_response"] = {
@@ -26,6 +22,14 @@ class Alma_Api_Client:
         }
         return api_data
 
+    def _call_get_api(self, api: str, parameters: dict = None) -> dict:
+        if parameters is None:
+            parameters = {}
+        get_url = self.BASE_URL + api
+        response = requests.get(get_url, headers=self.HEADERS, params=parameters)
+        api_data: dict = self._get_api_data(response)
+        return api_data
+
     def _call_post_api(self, api: str, data: str, parameters: dict = None) -> dict:
         if parameters is None:
             parameters = {}
@@ -33,13 +37,7 @@ class Alma_Api_Client:
         response = requests.post(
             post_url, headers=self.HEADERS, json=data, params=parameters
         )
-        api_data: dict = response.json()
-        # Add a few response elements caller can use
-        api_data["api_response"] = {
-            "headers": response.headers,
-            "status_code": response.status_code,
-            "request_url": response.url,
-        }
+        api_data: dict = self._get_api_data(response)
         return api_data
 
     def _call_delete_api(self, api: str, data: str, parameters: dict = None) -> dict:
@@ -55,13 +53,7 @@ class Alma_Api_Client:
             print(response.headers)
             print(response.text)
             # exit(1)
-        api_data: dict = response.json()
-        # Add a few response elements caller can use
-        api_data["api_response"] = {
-            "headers": response.headers,
-            "status_code": response.status_code,
-            "request_url": response.url,
-        }
+        api_data: dict = self._get_api_data(response)
         return api_data
 
     def create_item(
