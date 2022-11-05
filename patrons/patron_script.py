@@ -1,3 +1,4 @@
+import argparse
 import ast
 import csv
 import hashlib
@@ -12,20 +13,50 @@ from collections import Counter
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-s",
+        "--skip_hash_load",
+        help="Skip loading patron hashes - use for full loads",
+        action="store_true",
+    )
+    args = parser.parse_args()
+    if args.skip_hash_load:
+        previous_hashes = {}
+        print("Skipping previous hashes...")
+    else:
+        previous_hashes = _load_hashes()
+
     data_files = _get_filenames()
     patrons = _get_patrons(data_files)
     print(f"Merged patrons: {len(patrons)}")
 
-    # Remove patrons whose current UCLA data
-    # is identical to previous saved data.
+    # Compare hashes for current patrons to previous saved hashes.
+    # Ignore patrons which match;
+    # create new dictionary of new / updated patrons (no match).
+    new_hashes = {}
+    patrons_to_load = {}
+    hash_match_count = 0
     for ucla_uid, patron in patrons.items():
-        # testing... not yet implemented
-        print(f"HASH: {ucla_uid}, {_get_hash(patron)}")
+        new_hash = _get_hash(patron)
+        if new_hash == previous_hashes.get(ucla_uid):
+            hash_match_count += 1
+        else:
+            patrons_to_load[ucla_uid] = patron
+        new_hashes[ucla_uid] = new_hash
 
-    # Finally, write file of XML for load into Alma.
-    values = [patrons[uid]["USER_GROUP"] for uid in patrons]
+    print(f"Patrons to load: {len(patrons_to_load)}")
+    print(f"Patrons not updated: {hash_match_count}")
+
+    # Store hashes for all patrons
+    _store_hashes(new_hashes)
+
+    # Get counts of user groups, for now
+    values = [patrons[uid]["USER_GROUP"] for uid in patrons_to_load]
     pp.pprint(Counter(values))
-    patron_xml.write_xml(patrons)
+    # Finally, write file of XML for load into Alma.
+    # TODO: How to handle when no patrons_to_load?
+    patron_xml.write_xml(patrons_to_load)
 
 
 def _get_filenames():
@@ -379,6 +410,30 @@ def _get_hash(patron):
     # to identify patrons whose campus data has not changed.
     encoded = json.dumps(patron, sort_keys=True).encode()
     return hashlib.sha1(encoded).hexdigest()
+
+
+def _load_hashes() -> dict:
+    # Loads patron hashes from a file into a dictionary,
+    # keyed on patron ucla_uid.
+    # Filename is constant.
+    hash_file = "patron_hashes.dict"
+    hashes = {}
+    try:
+        with open(hash_file, "r") as f:
+            hashes = json.loads(f.read())
+            print(f"Loaded previous hashes: {len(hashes)}")
+    except FileNotFoundError:
+        print(f"ERROR: {hash_file} not found, no hash comparison can be done.")
+    return hashes
+
+
+def _store_hashes(hashes: dict) -> None:
+    # Stores a dictionary of patron hashes to a file.
+    # Filename is constant.
+    hash_file = "patron_hashes.dict"
+    with open(hash_file, "w") as f:
+        f.write(json.dumps(hashes))
+        print(f"Stored hashes: {len(hashes)}")
 
 
 if __name__ == "__main__":
