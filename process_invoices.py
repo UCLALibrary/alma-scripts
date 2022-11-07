@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from alma_api_client import Alma_Api_Client
+from alma_api_client import AlmaAPIClient
 from alma_api_keys import API_KEYS
 from datetime import datetime
 from invoice import Invoice
@@ -174,7 +174,7 @@ def create_pac_invoices(xml_file, dump_dict):
 
 def get_xml_from_alma():
     global client
-    client = Alma_Api_Client(API_KEYS["DIIT_SCRIPTS"])
+    client = AlmaAPIClient(API_KEYS["DIIT_SCRIPTS"])
     profile_id = get_invoice_profile_id()
     job_id = get_invoice_job_id(profile_id)
     instance_id = run_job(job_id)

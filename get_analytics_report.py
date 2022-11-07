@@ -4,7 +4,7 @@ import xmltodict
 import pprint as pp
 
 from alma_api_keys import API_KEYS
-from alma_api_client import Alma_Api_Client
+from alma_api_client import AlmaAPIClient
 
 
 def get_real_column_names(report_json):
@@ -103,7 +103,7 @@ def get_report_data(report):
 
 
 def run_report():
-    alma = Alma_Api_Client(API_KEYS["DIIT_ANALYTICS"])
+    alma = AlmaAPIClient(API_KEYS["DIIT_ANALYTICS"])
     report_path = "/shared/University of California Los Angeles (UCLA) 01UCS_LAL/Cataloging/Reports/API/Cataloging Statistics (API)"
     # From form
     yyyymm = "20220406"

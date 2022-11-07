@@ -4,7 +4,7 @@ import sys
 import pprint as pp
 
 from alma_api_keys import API_KEYS
-from alma_api_client import Alma_Api_Client
+from alma_api_client import AlmaAPIClient
 
 
 def _has_items(bib_id, holding_id):
@@ -35,7 +35,7 @@ def _format_item(item_data):
 
 
 if __name__ == "__main__":
-    alma = Alma_Api_Client(API_KEYS["DIIT_SCRIPTS"])
+    alma = AlmaAPIClient(API_KEYS["DIIT_SCRIPTS"])
     # Values for creating items
     # TODO: Pass to program via files
     # CLARK0099066 is the last assigned barcode, via ALMA-42
