@@ -1,9 +1,9 @@
 from csv import DictWriter
 from alma_api_keys import API_KEYS
-from alma_api_client import Alma_Api_Client
+from alma_api_client import AlmaAPIClient
 
 
-def get_active_vendor_codes(alma_client: type[Alma_Api_Client]) -> list:
+def get_active_vendor_codes(alma_client: type[AlmaAPIClient]) -> list:
     vendor_codes: list = []
     vendor_total: int = -1
     # Max limit (records per batch) is 100
@@ -60,7 +60,7 @@ def get_email_address(vendor: dict) -> str:
     return email_address
 
 
-def get_vendor_data(alma_client: type[Alma_Api_Client], vendor_codes: list) -> list:
+def get_vendor_data(alma_client: type[AlmaAPIClient], vendor_codes: list) -> list:
     # Returns a list of dictionaries, one for each vendor code
     vendor_data: list = []
     for vendor_code in vendor_codes:
@@ -86,7 +86,7 @@ def get_vendor_data(alma_client: type[Alma_Api_Client], vendor_codes: list) -> l
 
 
 def main() -> None:
-    alma_client = Alma_Api_Client(API_KEYS["DIIT_SCRIPTS"])
+    alma_client = AlmaAPIClient(API_KEYS["DIIT_SCRIPTS"])
     vendor_codes = get_active_vendor_codes(alma_client)
     vendor_data = get_vendor_data(alma_client, vendor_codes)
     column_headers = vendor_data[0].keys()

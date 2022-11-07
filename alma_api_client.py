@@ -2,7 +2,7 @@ import requests
 from time import sleep
 
 
-class Alma_Api_Client:
+class AlmaAPIClient:
     def __init__(self, api_key: str) -> None:
         self.API_KEY = api_key
         self.BASE_URL = "https://api-na.hosted.exlibrisgroup.com"
