@@ -4,11 +4,12 @@ Finds and runs an Alma job to export remote storage requests.
 See LICENSE.txt in this repository.
 """
 from datetime import datetime
+from typing import Type
 from alma_api_client import AlmaAPIClient
 from alma_api_keys import API_KEYS
 
 
-def get_profile_id(profile_name: str, alma_client: type[AlmaAPIClient]) -> str:
+def get_profile_id(profile_name: str, alma_client: Type[AlmaAPIClient]) -> str:
     """
     Given an Alma integration profile name (or word from the name),
         return the profile id configured for remote storage.
@@ -24,7 +25,7 @@ def get_profile_id(profile_name: str, alma_client: type[AlmaAPIClient]) -> str:
     return profile_id
 
 
-def get_job_id(profile_id: str, alma_client: type[AlmaAPIClient]) -> str:
+def get_job_id(profile_id: str, alma_client: Type[AlmaAPIClient]) -> str:
     """
     Given an Alma integration profile id, return the job id for sending remote storage requests.
     """
@@ -39,7 +40,7 @@ def get_job_id(profile_id: str, alma_client: type[AlmaAPIClient]) -> str:
     return job_id
 
 
-def run_job(job_id: str, alma_client: type[AlmaAPIClient]) -> None:
+def run_job(job_id: str, alma_client: Type[AlmaAPIClient]) -> None:
     """
     Given an Alma job id, run the job.
     """
@@ -58,7 +59,7 @@ def main():
     if job_id:
         now = datetime.now().strftime("%c")
         print(f"Running job {job_id} at {now}")
-        run_job(job_id)
+        run_job(job_id, alma_client)
 
 
 if __name__ == "__main__":
