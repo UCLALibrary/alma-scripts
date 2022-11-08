@@ -181,7 +181,7 @@ def get_xml_from_alma():
     # Wait for job to finish
     response = client.wait_for_completion(job_id, instance_id)
     # Eventually, get counter messages (invoices processed etc.) and times.
-    counters = get_invoice_counters(response)
+    # counters = get_invoice_counters(response)
     pp.pprint(response)
 
     # If no invoices exported, no file is created; otherwise file is
