@@ -151,3 +151,9 @@ class AlmaAPIClient:
             parameters = {}
         api = f"/almaws/v1/acq/vendors/{vendor_code}"
         return self._call_get_api(api, parameters)
+
+    def get_bib(self, mms_id: str, parameters: dict = None) -> dict:
+        if parameters is None:
+            parameters = {}
+        api = f"/almaws/v1/bibs/{mms_id}"
+        return self._call_get_api(api, parameters)
