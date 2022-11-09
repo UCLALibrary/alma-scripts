@@ -12,7 +12,7 @@ class AlmaAnalyticsClient:
         self.report_path: str = None
         self.rows_per_fetch: int = 1000
 
-    def set_filter(self, filter_xml: str) -> None:
+    def set_filter_xml(self, filter_xml: str) -> None:
         """Set filter which will be applied to Analytics report.
         Caller is responsible for building full XML required.
         Analytics report must already have an "Is prompted" filter
