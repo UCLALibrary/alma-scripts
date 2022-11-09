@@ -6,6 +6,13 @@ from alma_api_client import AlmaAPIClient
 class AlmaAnalyticsClient:
     def __init__(self, api_key: str) -> None:
         self.API_KEY = api_key
+        self.FILTER_XML_NAMESPACES = """
+            xmlns:saw="com.siebel.analytics.web/report/v1.1"
+            xmlns:sawx="com.siebel.analytics.web/expression/v1.1"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+        """
+
         self.alma_client = AlmaAPIClient(self.API_KEY)
         self.column_names: bool = True
         self.filter: str = None
@@ -28,10 +35,7 @@ class AlmaAnalyticsClient:
         """
         filter_xml = f"""
         <sawx:expr xsi:type="sawx:comparison" op="equal"
-            xmlns:saw="com.siebel.analytics.web/report/v1.1"
-            xmlns:sawx="com.siebel.analytics.web/expression/v1.1"
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-            xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            {self.FILTER_XML_NAMESPACES}
         >
             <sawx:expr xsi:type="sawx:sqlExpression">"{table_name}"."{field_name}"</sawx:expr>
             <sawx:expr xsi:type="xsd:string">{value}</sawx:expr>
@@ -48,10 +52,7 @@ class AlmaAnalyticsClient:
         """
         filter_xml = f"""
         <sawx:expr xsi:type="sawx:list" op="like"
-            xmlns:saw="com.siebel.analytics.web/report/v1.1"
-            xmlns:sawx="com.siebel.analytics.web/expression/v1.1"
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-            xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            {self.FILTER_XML_NAMESPACES}
         >
             <sawx:expr xsi:type="sawx:sqlExpression">"{table_name}"."{field_name}"</sawx:expr>
             <sawx:expr xsi:type="xsd:string">{value}</sawx:expr>
