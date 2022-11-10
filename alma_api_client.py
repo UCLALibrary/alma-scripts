@@ -6,14 +6,14 @@ class AlmaAPIClient:
     def __init__(self, api_key: str) -> None:
         self.API_KEY = api_key
         self.BASE_URL = "https://api-na.hosted.exlibrisgroup.com"
-        self.HEADERS = {
-            "Authorization": f"apikey {self.API_KEY}",
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        }
 
-    def _get_api_data(self, response: requests.Response) -> dict:
-        api_data: dict = response.json()
+    def _get_api_data(self, response: requests.Response, format: str) -> dict:
+        if format == "json":
+            api_data: dict = response.json()
+
+        elif format == "xml":
+            api_data = {"content": response.content}
+
         # Add a few response elements caller can use
         api_data["api_response"] = {
             "headers": response.headers,
@@ -22,12 +22,28 @@ class AlmaAPIClient:
         }
         return api_data
 
-    def _call_get_api(self, api: str, parameters: dict = None) -> dict:
+    def _set_headers(self, format: str) -> dict:
+        if format == "json":
+            self.HEADERS = {
+                "Authorization": f"apikey {self.API_KEY}",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            }
+        elif format == "xml":
+            self.HEADERS = {
+                "Authorization": f"apikey {self.API_KEY}",
+                "Content-Type": "application/xml",
+                "Accept": "application/xml",
+            }
+        return self.HEADERS
+
+    def _call_get_api(self, api: str, format: str, parameters: dict = None) -> dict:
         if parameters is None:
             parameters = {}
+        headers = self._set_headers(format)
         get_url = self.BASE_URL + api
-        response = requests.get(get_url, headers=self.HEADERS, params=parameters)
-        api_data: dict = self._get_api_data(response)
+        response = requests.get(get_url, headers=headers, params=parameters)
+        api_data: dict = self._get_api_data(response, format)
         return api_data
 
     def _call_post_api(self, api: str, data: str, parameters: dict = None) -> dict:
@@ -38,6 +54,17 @@ class AlmaAPIClient:
             post_url, headers=self.HEADERS, json=data, params=parameters
         )
         api_data: dict = self._get_api_data(response)
+        return api_data
+
+    def _call_put_api(
+        self, api: str, format: str, data: str, parameters: dict = None
+    ) -> dict:
+        if parameters is None:
+            parameters = {}
+        headers = self._set_headers(format)
+        put_url = self.BASE_URL + api
+        response = requests.put(put_url, headers=headers, data=data, params=parameters)
+        api_data: dict = self._get_api_data(response, format)
         return api_data
 
     def _call_delete_api(self, api: str, data: str, parameters: dict = None) -> dict:
@@ -152,8 +179,14 @@ class AlmaAPIClient:
         api = f"/almaws/v1/acq/vendors/{vendor_code}"
         return self._call_get_api(api, parameters)
 
-    def get_bib(self, mms_id: str, parameters: dict = None) -> dict:
+    def get_bib(self, mms_id: str, format: str, parameters: dict = None) -> dict:
         if parameters is None:
             parameters = {}
         api = f"/almaws/v1/bibs/{mms_id}"
-        return self._call_get_api(api, parameters)
+        return self._call_get_api(api, format, parameters)
+
+    def update_bib(self, mms_id: str, data: str, parameters: dict = None) -> dict:
+        if parameters is None:
+            parameters = {}
+        api = f"/almaws/v1/bibs/{mms_id}"
+        return self._call_put_api(api, "xml", data, parameters)
