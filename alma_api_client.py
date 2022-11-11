@@ -3,25 +3,27 @@ from time import sleep
 
 
 class AlmaAPIClient:
-    def __init__(self, api_key: str, format: str = "json") -> None:
+    def __init__(self, api_key: str) -> None:
         self.API_KEY = api_key
         self.BASE_URL = "https://api-na.hosted.exlibrisgroup.com"
-        if format in ["json", "xml"]:
-            self.format = format
-        else:
-            raise ValueError(f"Invalid format {format}")
-        self.headers = {
+
+    def _get_headers(self, format: str = "json") -> dict:
+        return {
             "Authorization": f"apikey {self.API_KEY}",
             "Accept": f"application/{format}",
             "Content-Type": f"application/{format}",
         }
 
-    def _get_api_data(self, response: requests.Response) -> dict:
-        if self.format == "json":
+    def _get_api_data(self, response: requests.Response, format: str = "json") -> dict:
+        """Return dictionary with response content and selected response headers.
+
+        If format is not json, the (presumably) XML content is in api_data["content"],
+        as a byte array.
+        """
+        if format == "json":
             api_data: dict = response.json()
         else:
             api_data = {"content": response.content}
-
         # Add a few response elements caller can use
         api_data["api_response"] = {
             "headers": response.headers,
@@ -30,31 +32,41 @@ class AlmaAPIClient:
         }
         return api_data
 
-    def _call_get_api(self, api: str, parameters: dict = None) -> dict:
+    def _call_get_api(
+        self, api: str, parameters: dict = None, format: str = "json"
+    ) -> dict:
         if parameters is None:
             parameters = {}
         get_url = self.BASE_URL + api
-        response = requests.get(get_url, headers=self.headers, params=parameters)
-        api_data: dict = self._get_api_data(response)
+        headers = self._get_headers(format)
+        response = requests.get(get_url, headers=headers, params=parameters)
+        api_data: dict = self._get_api_data(response, format)
         return api_data
 
-    def _call_post_api(self, api: str, data: str, parameters: dict = None) -> dict:
+    def _call_post_api(
+        self, api: str, data: str, parameters: dict = None, format: str = "json"
+    ) -> dict:
         if parameters is None:
             parameters = {}
         post_url = self.BASE_URL + api
+        headers = self._get_headers(format)
+        # TODO: Non-JSON POST?
         response = requests.post(
-            post_url, headers=self.HEADERS, json=data, params=parameters
+            post_url, headers=headers, json=data, params=parameters
         )
         api_data: dict = self._get_api_data(response)
         return api_data
 
-    def _call_put_api(self, api: str, data: str, parameters: dict = None) -> dict:
+    def _call_put_api(
+        self, api: str, data: str, parameters: dict = None, format: str = "json"
+    ) -> dict:
         if parameters is None:
             parameters = {}
-        headers = self.headers
+        headers = self._get_headers(format)
         put_url = self.BASE_URL + api
+        # TODO: JSON PUT?  Only update_bib uses PUT so far, and requires XML.
         response = requests.put(put_url, headers=headers, data=data, params=parameters)
-        api_data: dict = self._get_api_data(response)
+        api_data: dict = self._get_api_data(response, format)
         return api_data
 
     def _call_delete_api(self, api: str, data: str, parameters: dict = None) -> dict:
@@ -170,13 +182,16 @@ class AlmaAPIClient:
         return self._call_get_api(api, parameters)
 
     def get_bib(self, mms_id: str, parameters: dict = None) -> dict:
+        """Return dictionary response, with Alma bib record (in Alma XML format),
+        in "content" element.
+        """
         if parameters is None:
             parameters = {}
         api = f"/almaws/v1/bibs/{mms_id}"
-        return self._call_get_api(api, parameters)
+        return self._call_get_api(api, parameters, format="xml")
 
     def update_bib(self, mms_id: str, data: str, parameters: dict = None) -> dict:
         if parameters is None:
             parameters = {}
         api = f"/almaws/v1/bibs/{mms_id}"
-        return self._call_put_api(api, data, parameters)
+        return self._call_put_api(api, data, parameters, format="xml")
