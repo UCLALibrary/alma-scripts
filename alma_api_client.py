@@ -54,7 +54,7 @@ class AlmaAPIClient:
         response = requests.post(
             post_url, headers=headers, json=data, params=parameters
         )
-        api_data: dict = self._get_api_data(response)
+        api_data: dict = self._get_api_data(response, format)
         return api_data
 
     def _call_put_api(
@@ -82,7 +82,7 @@ class AlmaAPIClient:
             print(response.headers)
             print(response.text)
             # exit(1)
-        api_data: dict = self._get_api_data(response)
+        api_data: dict = self._get_api_data(response, format)
         return api_data
 
     def create_item(
