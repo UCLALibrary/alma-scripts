@@ -66,7 +66,9 @@ def main():
     with open(input_file, encoding="utf-8-sig", newline="") as csv_file:
         reader = csv.DictReader(csv_file, dialect="excel")
         for row in reader:
-            xml += get_xml_invoice(row)
+            # Skip "empty" rows which should not be in the data...
+            if row["Vendor Code"] != "":
+                xml += get_xml_invoice(row)
         xml += get_xml_footer()
     print(xml)
 
