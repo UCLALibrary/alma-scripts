@@ -3,7 +3,7 @@ from pymarc import parse_xml_to_array, record_to_xml_node, Record
 from io import BytesIO
 
 
-def get_record_from_bib(alma_bib: bytes) -> Record:
+def get_pymarc_record_from_bib(alma_bib: bytes) -> Record:
     """Takes an Alma Bib and returns a pymarc Record containing <record> content."""
     root = ET.fromstring(alma_bib)
     record = root.find("record")
@@ -16,7 +16,7 @@ def get_record_from_bib(alma_bib: bytes) -> Record:
     return pymarc_record
 
 
-def update_alma_bib_record(original_bib: bytes, new_record: Record) -> bytes:
+def prepare_bib_for_update(original_bib: bytes, new_record: Record) -> bytes:
     """Takes an Alma Bib and a pymarc Record and returns an updated Bib bytestring
     containing data from the new Record in the <record> element."""
     # convert Bib and Record to ET Elements,
