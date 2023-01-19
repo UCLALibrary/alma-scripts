@@ -48,9 +48,13 @@ def get_ebookplates(report: list, input_file: str) -> list:
     return new_report
 
 
-def insert_ebookplates(alma_api_key: str, report: list) -> None:
-    # using Sandbox key only for now
+def insert_ebookplates(alma_api_key: str, report: list) -> tuple[int, int, int]:
     client = AlmaAPIClient(alma_api_key)
+    # keep track of # of bibs updated for later reporting
+    total_updated = 0
+    total_skipped = 0
+    total_errored = 0
+
     for item in report:
         mms_id = item["MMS Id"]
         spac_name = item["spac_name"]
@@ -61,6 +65,14 @@ def insert_ebookplates(alma_api_key: str, report: list) -> None:
 
         # get bib from Alma
         alma_bib = client.get_bib(mms_id).get("content")
+        # make sure we got a valid bib
+        if b"is not valid" in alma_bib:
+            total_errored += 1
+            print(
+                f"Got an error finding bib record for MMS ID {mms_id}. Skipping this record."
+            )
+            continue
+
         # convert to Pymarc to handle fields and subfields
         pymarc_record = get_pymarc_record_from_bib(alma_bib)
 
@@ -83,11 +95,16 @@ def insert_ebookplates(alma_api_key: str, report: list) -> None:
             new_alma_bib = prepare_bib_for_update(alma_bib, pymarc_record)
             client.update_bib(mms_id, new_alma_bib)
             print(f"Added SPAC to bib. MMS ID: {mms_id}, SPAC Name: {spac_name}")
+            total_updated += 1
+
         # print extra info if a duplicate 967 is found
         else:
             print(
                 f"Skipped bib with existing 967 SPAC. MMS ID: {mms_id}, SPAC Name: {spac_name}"
             )
+            total_skipped += 1
+
+    return total_updated, total_skipped, total_errored
 
 
 def is_not_duplicate_967(old_record: Record, spac_name: str) -> bool:
@@ -110,21 +127,34 @@ def main():
         report_data = [
             {
                 "MMS Id": "9996854839106533",
-                "Fund Ledger Code": "2AR008",
+                "Fund Ledger Code": "4SC003",
                 "Transaction Date": "2022-04-15T00:00:00",
                 "Transaction Item Type": "EXPENDITURE",
                 "Invoice-Number": "9300014049",
             }
         ]
         alma_api_key = API_KEYS["SANDBOX"]
-        # next 3 lines can move out of conditional once API keys are finalized
-        report_with_ebookplates = get_ebookplates(report_data, args.spac_mappings_file)
-        insert_ebookplates(alma_api_key, report_with_ebookplates)
-        print(f"Processed {len(report_data)} bib e-bookplates")
 
     elif args.environment == "production":
         analytics_api_key = API_KEYS["DIIT_ANALYTICS"]
+        alma_api_key = API_KEYS["DIIT_SCRIPTS"]
         report_data = get_fund_code_report(analytics_api_key)
+
+    print(f"Beginning processing {len(report_data)} bib e-bookplates")
+    print()
+
+    report_with_ebookplates = get_ebookplates(report_data, args.spac_mappings_file)
+    total_updated, total_skipped, total_errored = insert_ebookplates(
+        alma_api_key, report_with_ebookplates
+    )
+
+    print()
+    print(
+        "Finished adding ebookplates. ",
+        f"{total_updated} bibs updated. ",
+        f"{total_skipped} bibs skipped due to duplicate 967s.",
+        f"{total_errored} bibs skipped due to errors.",
+    )
 
 
 if __name__ == "__main__":
