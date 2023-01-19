@@ -61,33 +61,33 @@ def insert_ebookplates(alma_api_key: str, report: list) -> None:
 
         # get bib from Alma
         alma_bib = client.get_bib(mms_id).get("content")
-        # use pymarc to add new 967 field
+        # convert to Pymarc to handle fields and subfields
         pymarc_record = get_pymarc_record_from_bib(alma_bib)
 
         # first check for existing 967, matching on $a
         if is_not_duplicate_967(pymarc_record, spac_name):
             # if we have a spac_url, add it in $b - otherwise only use $a and $c
             if spac_url:
-                pymarc_record.add_field(
-                    Field(
-                        tag="967",
-                        # alma_marc.prepare_bib_for_update needs indicators explicitly set
-                        indicators=[" ", " "],
-                        subfields=["a", spac_name, "b", spac_url, "c", spac_image],
-                    )
-                )
+                subfields = ["a", spac_name, "b", spac_url, "c", spac_image]
             else:
-                pymarc_record.add_field(
-                    Field(
-                        tag="967",
-                        # alma_marc.prepare_bib_for_update needs indicators explicitly set
-                        indicators=[" ", " "],
-                        subfields=["a", spac_name, "c", spac_image],
-                    )
+                subfields = ["a", spac_name, "c", spac_image]
+            pymarc_record.add_field(
+                Field(
+                    tag="967",
+                    # alma_marc.prepare_bib_for_update needs indicators explicitly set
+                    indicators=[" ", " "],
+                    subfields=subfields,
                 )
+            )
             # repackage Alma bib and send update
             new_alma_bib = prepare_bib_for_update(alma_bib, pymarc_record)
             client.update_bib(mms_id, new_alma_bib)
+            print(f"Added SPAC to bib. MMS ID: {mms_id}, SPAC Name: {spac_name}")
+        # print extra info if a duplicate 967 is found
+        else:
+            print(
+                f"Skipped bib with existing 967 SPAC. MMS ID: {mms_id}, SPAC Name: {spac_name}"
+            )
 
 
 def is_not_duplicate_967(old_record: Record, spac_name: str) -> bool:
@@ -110,7 +110,7 @@ def main():
         report_data = [
             {
                 "MMS Id": "9996854839106533",
-                "Fund Ledger Code": "4IS001",
+                "Fund Ledger Code": "2AR008",
                 "Transaction Date": "2022-04-15T00:00:00",
                 "Transaction Item Type": "EXPENDITURE",
                 "Invoice-Number": "9300014049",
