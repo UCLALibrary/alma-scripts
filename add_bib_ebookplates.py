@@ -79,16 +79,13 @@ def insert_ebookplates(alma_api_key: str, report: list) -> tuple[int, int, int]:
 
         # first check for existing 967, matching on $a
         if is_not_duplicate_967(pymarc_record, spac_name):
-            # spac_image and spac_url go in $b and $c if present
-            # otherwise only use $a
-            if spac_url and spac_image:
-                subfields = ["a", spac_name, "b", spac_url, "c", spac_image]
-            elif spac_url:
-                subfields = ["a", spac_name, "b", spac_url]
-            elif spac_image:
-                subfields = ["a", spac_name, "c", spac_image]
-            else:
-                subfields = ["a", spac_name]
+            # always have spac name in $a
+            subfields = ["a", spac_name]
+            # add $b and $c if they exist
+            if spac_url:
+                subfields.extend(["b", spac_url])
+            if spac_image:
+                subfields.extend(["c", spac_image])
             pymarc_record.add_field(
                 Field(
                     tag="967",
