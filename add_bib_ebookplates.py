@@ -37,6 +37,7 @@ def get_ebookplates(report: list, input_file: str) -> list:
                 current_item["spac_code"] = line["SPAC_CODE"]
                 current_item["spac_name"] = line["SPAC_NAME"]
                 current_item["spac_url"] = line["E-bookplate link"]
+                current_item["spac_image"] = line["Bookplate Image Link"]
                 new_report.append(current_item)
 
     # sanity check - same number of items before and after SPAC mapping?
@@ -61,7 +62,7 @@ def insert_ebookplates(alma_api_key: str, report: list) -> tuple[int, int, int]:
         # spac_url will be an empty string for some SPACs - this is ok!
         spac_url = item["spac_url"]
         # placeholder text for now - this will eventually vary with each SPAC
-        spac_image = "fake image url"
+        spac_image = item["spac_image"]
 
         # get bib from Alma
         alma_bib = client.get_bib(mms_id).get("content")
@@ -78,11 +79,16 @@ def insert_ebookplates(alma_api_key: str, report: list) -> tuple[int, int, int]:
 
         # first check for existing 967, matching on $a
         if is_not_duplicate_967(pymarc_record, spac_name):
-            # if we have a spac_url, add it in $b - otherwise only use $a and $c
-            if spac_url:
+            # spac_image and spac_url go in $b and $c if present
+            # otherwise only use $a
+            if spac_url and spac_image:
                 subfields = ["a", spac_name, "b", spac_url, "c", spac_image]
-            else:
+            elif spac_url:
+                subfields = ["a", spac_name, "b", spac_url]
+            elif spac_image:
                 subfields = ["a", spac_name, "c", spac_image]
+            else:
+                subfields = ["a", spac_name]
             pymarc_record.add_field(
                 Field(
                     tag="967",
@@ -127,7 +133,7 @@ def main():
         report_data = [
             {
                 "MMS Id": "9996854839106533",
-                "Fund Ledger Code": "4SC003",
+                "Fund Ledger Code": "2SC010",
                 "Transaction Date": "2022-04-15T00:00:00",
                 "Transaction Item Type": "EXPENDITURE",
                 "Invoice-Number": "9300014049",
