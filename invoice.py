@@ -295,7 +295,6 @@ class Invoice:
             return "C"
 
     def _calculate_totals(self):
-        vendor_invoice_total = Decimal(0)
         total_state_taxable = Decimal(0)
         total_vendor_taxable = Decimal(0)
         total_non_taxable = Decimal(0)
@@ -367,7 +366,8 @@ class Invoice:
         project = fau[26:32]
         # Project must be 6 characters; right-pad with blanks, up to 6
         project = project.ljust(6, " ")
-        # Source was 6 blanks; LBS wants char 4-9 (1-based) of the unique identifier in hopes of a useful PAC identifier.
+        # Source was 6 blanks; LBS wants char 4-9 (1-based) of the unique identifier
+        # in hopes of a useful PAC identifier.
         source = self.data["unique_identifier"][3:9]
         return loc + account + cc + fund + project + sub + obj + source
 
@@ -412,6 +412,7 @@ class Invoice:
         # TODO: Can we always just use 1st 2 chars of lbs_tax_code here?
         lbs_tax_code = inv_line["lbs_tax_code"]
         line_code = inv_line["line_code"]
+        line_type = inv_line["line_type"]
         if lbs_tax_code[:2] == "EX" or line_code == "FT":
             pac_tax_code = "E "
         # Some shipping/handling lines are VR ESH/TSH;
@@ -421,10 +422,13 @@ class Invoice:
         # Non-VR ESH
         elif line_code == "ESH":
             pac_tax_code = "E "
+        # Non-VR TSH
         elif line_code == "TSH":
             pac_tax_code = "SM"
-        elif line_code == "CR ":
+        # Special tax "credits" where full tax was not charged
+        elif line_code == "CR " and line_type == "BA":
             pac_tax_code = "E "
+        # Everything else, including non-VR credits, gets this default
         else:
             pac_tax_code = "SM"
 
@@ -563,9 +567,8 @@ class Invoice:
 
     def _get_z21_line3(self, inv_line):
         # If a line has only one fund, FAU info in Z21 line 3, and no Z41s.
-        # If a line has multiple funds, create Z41s, and no FAU info
+        # If a line has multiple funds, create Z41s (later), and no FAU info
         # in Z21 line 3.
-        z41_lines = []
         if inv_line["fund_count"] == 1:
             fund_info = inv_line["fund_info"][0]
             z21_line3 = (
