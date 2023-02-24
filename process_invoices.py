@@ -6,7 +6,6 @@ from invoice import Invoice
 from sftp_credentials import ALMA, PAC
 import argparse
 import os
-import sys  # for exit() while testing
 import pprint as pp
 import pysftp
 import re
@@ -150,7 +149,7 @@ def create_pac_invoices(xml_file, dump_dict):
     for alma_invoice in root.findall(".//alma:invoice", ns):
         try:
             invoice = Invoice(alma_invoice, ns)
-            #####_inject_test_number(invoice, '-2')
+            # _inject_test_number(invoice, '-2')
 
             if dump_dict:
                 invoice.dump()
