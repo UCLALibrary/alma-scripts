@@ -68,7 +68,11 @@ def main():
         for row in reader:
             # Skip "empty" rows which should not be in the data...
             if row["Vendor Code"] != "":
-                xml += get_xml_invoice(row)
+                try:
+                    xml += get_xml_invoice(row)
+                except ValueError as ex:
+                    sys.stderr.write(f"{ex}\n")
+                    sys.stderr.write(f"{row}\n")
         xml += get_xml_footer()
     print(xml)
 
