@@ -195,3 +195,9 @@ class AlmaAPIClient:
             parameters = {}
         api = f"/almaws/v1/bibs/{mms_id}"
         return self._call_put_api(api, data, parameters, format="xml")
+
+    def get_set_members(self, set_id: str, parameters: dict = None) -> None:
+        if parameters is None:
+            parameters = {}
+        api = f"/almaws/v1/conf/sets/{set_id}/members"
+        return self._call_get_api(api, parameters)
