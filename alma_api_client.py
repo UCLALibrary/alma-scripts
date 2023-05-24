@@ -201,3 +201,9 @@ class AlmaAPIClient:
             parameters = {}
         api = f"/almaws/v1/conf/sets/{set_id}/members"
         return self._call_get_api(api, parameters)
+
+    def get_user(self, user_id: str, parameters: dict = None) -> dict:
+        if parameters is None:
+            parameters = {}
+        api = f"/almaws/v1/users/{user_id}"
+        return self._call_get_api(api, parameters)
