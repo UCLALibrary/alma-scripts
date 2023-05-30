@@ -20,10 +20,14 @@ class AlmaAPIClient:
         If format is not json, the (presumably) XML content is in api_data["content"],
         as a byte array.
         """
-        if format == "json":
-            api_data: dict = response.json()
-        else:
-            api_data = {"content": response.content}
+        try:
+            if format == "json":
+                api_data: dict = response.json()
+            else:
+                api_data = {"content": response.content}
+        except requests.exceptions.JSONDecodeError:
+            # Some responses return nothing, which can't be decoded...
+            api_data = {}
         # Add a few response elements caller can use
         api_data["api_response"] = {
             "headers": response.headers,
@@ -44,7 +48,7 @@ class AlmaAPIClient:
         return api_data
 
     def _call_post_api(
-        self, api: str, data: str, parameters: dict = None, format: str = "json"
+        self, api: str, data: dict, parameters: dict = None, format: str = "json"
     ) -> dict:
         if parameters is None:
             parameters = {}
@@ -64,16 +68,27 @@ class AlmaAPIClient:
             parameters = {}
         headers = self._get_headers(format)
         put_url = self.BASE_URL + api
-        # TODO: JSON PUT?  Only update_bib uses PUT so far, and requires XML.
-        response = requests.put(put_url, headers=headers, data=data, params=parameters)
+        # Handle both XML (required by update_bib) and default JSON
+        if format == "xml":
+            response = requests.put(
+                put_url, headers=headers, data=data, params=parameters
+            )
+        else:
+            # json default
+            response = requests.put(
+                put_url, headers=headers, json=data, params=parameters
+            )
         api_data: dict = self._get_api_data(response, format)
         return api_data
 
-    def _call_delete_api(self, api: str, data: str, parameters: dict = None) -> dict:
+    def _call_delete_api(
+        self, api: str, parameters: dict = None, format: str = "json"
+    ) -> dict:
         if parameters is None:
             parameters = {}
-        delete_url = self.BASE_URL + api + parameters
-        response = requests.delete(delete_url, headers=self.HEADERS, data=data)
+        delete_url = self.BASE_URL + api
+        headers = self._get_headers(format)
+        response = requests.delete(delete_url, headers=headers, params=parameters)
         # Success is HTTP 204, "No Content"
         if response.status_code != 204:
             # TODO: Real error handling
@@ -86,7 +101,7 @@ class AlmaAPIClient:
         return api_data
 
     def create_item(
-        self, bib_id: str, holding_id: str, data: str, parameters: dict = None
+        self, bib_id: str, holding_id: str, data: dict, parameters: dict = None
     ) -> dict:
         if parameters is None:
             parameters = {}
@@ -202,8 +217,76 @@ class AlmaAPIClient:
         api = f"/almaws/v1/conf/sets/{set_id}/members"
         return self._call_get_api(api, parameters)
 
+    def create_user(self, user: dict, parameters: dict = None) -> dict:
+        if parameters is None:
+            parameters = {}
+        api = "/almaws/v1/users"
+        return self._call_post_api(api, user, parameters)
+
+    def delete_user(self, user_id: str, parameters: dict = None) -> dict:
+        if parameters is None:
+            parameters = {}
+        api = f"/almaws/v1/users/{user_id}"
+        return self._call_delete_api(api, parameters)
+
     def get_user(self, user_id: str, parameters: dict = None) -> dict:
         if parameters is None:
             parameters = {}
         api = f"/almaws/v1/users/{user_id}"
+        return self._call_get_api(api, parameters)
+
+    def update_user(self, user_id: str, user: dict, parameters: dict = None) -> dict:
+        if parameters is None:
+            parameters = {}
+        api = f"/almaws/v1/users/{user_id}"
+        return self._call_put_api(api, user, parameters)
+
+    def get_general_configuration(self) -> dict:
+        """Return general configuration info.
+        Useful for checking production / sandbox via environment_type.
+        """
+        api = "/almaws/v1/conf/general"
+        return self._call_get_api(api)
+
+    def get_code_tables(self) -> dict:
+        """Return list of code tables.  This specific API is undocumented."""
+        api = "/almaws/v1/conf/code-tables"
+        return self._call_get_api(api)
+
+    def get_code_table(self, code_table: str, parameters: dict = None) -> dict:
+        """Return specific code table, via name from get_code_tables()."""
+        if parameters is None:
+            parameters = {}
+        api = f"/almaws/v1/conf/code-tables/{code_table}"
+        return self._call_get_api(api, parameters)
+
+    def get_mapping_tables(self) -> dict:
+        """Return list of mapping tables.  This specific API is undocumented."""
+        api = "/almaws/v1/conf/mapping-tables"
+        return self._call_get_api(api)
+
+    def get_mapping_table(self, mapping_table: str, parameters: dict = None) -> dict:
+        """Return specific mapping table, via name from get_mapping_tables()."""
+        if parameters is None:
+            parameters = {}
+        api = f"/almaws/v1/conf/code-tables/{mapping_table}"
+        return self._call_get_api(api, parameters)
+
+    def get_libraries(self) -> dict:
+        """Return all libraries."""
+        api = "/almaws/v1/conf/libraries"
+        return self._call_get_api(api)
+
+    def get_library(self, library_code: str) -> dict:
+        """Return data for a single library, via code.
+        Doesn't provide more details than each entry in get_libaries().
+        """
+        api = f"/almaws/v1/conf/libraries/{library_code}"
+        return self._call_get_api(api)
+
+    def get_circulation_desks(self, library_code: str, parameters: dict = None) -> dict:
+        """Return data about circ desks in a single library, via code."""
+        if parameters is None:
+            parameters = {}
+        api = f"/almaws/v1/conf/libraries/{library_code}/circ-desks/"
         return self._call_get_api(api, parameters)
