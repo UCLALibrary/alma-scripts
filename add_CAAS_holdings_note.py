@@ -60,6 +60,7 @@ def main():
             client.update_holding(mms_id, holding_id, new_alma_holding)
             updated_holdings_count += 1
     print(f"Finished updating {updated_holdings_count} holdings.")
+    print(f"Encountered {errored_holdings_count} errors.")
 
 
 if __name__ == "__main__":
