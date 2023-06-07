@@ -35,6 +35,9 @@ def main():
         report_data = get_holdings_report(analytics_api_key)
 
     client = AlmaAPIClient(alma_api_key)
+    print(f"Found {len(report_data)} holdings to update.")
+    errored_holdings_count = 0
+    updated_holdings_count = 0
 
     for item in report_data:
         mms_id = item["MMS Id"]
@@ -46,15 +49,17 @@ def main():
             print(
                 f"Error finding MMS ID {mms_id}, Holding ID {holding_id}. Skipping this record."
             )
-            continue
-
-        # convert to Pymarc to handle fields and subfields
-        pymarc_record = get_pymarc_record_from_bib(alma_holding)
-        pymarc_852 = pymarc_record.get_fields("852")[0]
-        pymarc_852.add_subfield(code="z", value="Reading Room Use ONLY.")
-        # convert back to Alma Holding and send update
-        new_alma_holding = prepare_bib_for_update(alma_holding, pymarc_record)
-        client.update_holding(mms_id, holding_id, new_alma_holding)
+            errored_holdings_count += 1
+        else:
+            # convert to Pymarc to handle fields and subfields
+            pymarc_record = get_pymarc_record_from_bib(alma_holding)
+            pymarc_852 = pymarc_record.get_fields("852")[0]
+            pymarc_852.add_subfield(code="z", value="Reading Room Use ONLY.")
+            # convert back to Alma Holding and send update
+            new_alma_holding = prepare_bib_for_update(alma_holding, pymarc_record)
+            client.update_holding(mms_id, holding_id, new_alma_holding)
+            updated_holdings_count += 1
+    print(f"Finished updating {updated_holdings_count} holdings.")
 
 
 if __name__ == "__main__":
