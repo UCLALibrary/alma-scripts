@@ -211,6 +211,25 @@ class AlmaAPIClient:
         api = f"/almaws/v1/bibs/{mms_id}"
         return self._call_put_api(api, data, parameters, format="xml")
 
+    def get_holding(
+        self, mms_id: str, holding_id: str, parameters: dict = None
+    ) -> dict:
+        """Return dictionary response, with Alma holding record (in Alma XML format),
+        in "content" element.
+        """
+        if parameters is None:
+            parameters = {}
+        api = f"/almaws/v1/bibs/{mms_id}/holdings/{holding_id}"
+        return self._call_get_api(api, parameters, format="xml")
+
+    def update_holding(
+        self, mms_id: str, holding_id: str, data: str, parameters: dict = None
+    ) -> dict:
+        if parameters is None:
+            parameters = {}
+        api = f"/almaws/v1/bibs/{mms_id}/holdings/{holding_id}"
+        return self._call_put_api(api, data, format="xml")
+
     def get_set_members(self, set_id: str, parameters: dict = None) -> None:
         if parameters is None:
             parameters = {}
