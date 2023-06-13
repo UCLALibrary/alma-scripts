@@ -25,7 +25,8 @@ def main():
     if args.environment == "sandbox":
         # test data for sandbox environment
         report_data = [
-            {"MMS Id": "9924282823606533", "Holding Id": "22534807520006533"}
+            {"MMS Id": "9960876273606533", "Holding Id": "22316143290006533"},
+            {"MMS Id": "FAKEMMS", "Holding Id": "FAKEHOLDING"},
         ]
         alma_api_key = API_KEYS["SANDBOX"]
 
@@ -45,7 +46,7 @@ def main():
 
         alma_holding = client.get_holding(mms_id, holding_id).get("content")
         # make sure we got a valid bib
-        if b"is not valid" in alma_holding:
+        if b"is not valid" in alma_holding or b"INTERNAL_SERVER_ERROR" in alma_holding:
             print(
                 f"Error finding MMS ID {mms_id}, Holding ID {holding_id}. Skipping this record."
             )
@@ -54,7 +55,7 @@ def main():
             # convert to Pymarc to handle fields and subfields
             pymarc_record = get_pymarc_record_from_bib(alma_holding)
             pymarc_852 = pymarc_record.get_fields("852")[0]
-            pymarc_852.add_subfield(code="z", value="Reading Room Use ONLY.")
+            pymarc_852.add_subfield(code="z", value="Reading Room Use ONLY.", pos=0)
             # convert back to Alma Holding and send update
             new_alma_holding = prepare_bib_for_update(alma_holding, pymarc_record)
             client.update_holding(mms_id, holding_id, new_alma_holding)
