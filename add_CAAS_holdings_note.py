@@ -25,6 +25,9 @@ def main():
     if args.environment == "sandbox":
         # test data for sandbox environment
         report_data = [
+            # No existing 852 $z
+            {"MMS Id": "9924282823606533", "Holding Id": "22534807520006533"},
+            # Existing 852 $z
             {"MMS Id": "9960876273606533", "Holding Id": "22316143290006533"},
             {"MMS Id": "FAKEMMS", "Holding Id": "FAKEHOLDING"},
         ]
@@ -55,13 +58,34 @@ def main():
             # convert to Pymarc to handle fields and subfields
             pymarc_record = get_pymarc_record_from_bib(alma_holding)
             pymarc_852 = pymarc_record.get_fields("852")[0]
-            pymarc_852.add_subfield(code="z", value="Reading Room Use ONLY.", pos=0)
+            zpos = get_subfield_position(pymarc_852, "z")
+            pymarc_852.add_subfield(code="z", value="Reading Room Use ONLY.", pos=zpos)
             # convert back to Alma Holding and send update
             new_alma_holding = prepare_bib_for_update(alma_holding, pymarc_record)
-            client.update_holding(mms_id, holding_id, new_alma_holding)
+            # These 3 lines added for QAD testing
+            import pprint
+
+            pprint.pprint(new_alma_holding.decode().replace("><", ">\n<"), width=160)
+            # client.update_holding(mms_id, holding_id, new_alma_holding)
             updated_holdings_count += 1
     print(f"Finished updating {updated_holdings_count} holdings.")
     print(f"Encountered {errored_holdings_count} errors.")
+
+
+def get_subfield_position(field: list, subfield_code: str) -> int:
+    """Return 0-based position of the first subfield with the given code,
+    or None if not found.
+    """
+    found = False
+    pos = -1
+    # field is essentially a list of subfields; each subfield is a tuple(code, val).
+    # Convoluted logic due to subfield implementation in pymarc before version 5.
+    for subfield in field:
+        pos += 1
+        if subfield[0] == subfield_code:
+            found = True
+            break
+    return pos if found else None
 
 
 if __name__ == "__main__":
