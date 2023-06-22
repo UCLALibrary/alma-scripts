@@ -62,11 +62,7 @@ def main():
             pymarc_852.add_subfield(code="z", value="Reading Room Use ONLY.", pos=zpos)
             # convert back to Alma Holding and send update
             new_alma_holding = prepare_bib_for_update(alma_holding, pymarc_record)
-            # These 3 lines added for QAD testing
-            import pprint
-
-            pprint.pprint(new_alma_holding.decode().replace("><", ">\n<"), width=160)
-            # client.update_holding(mms_id, holding_id, new_alma_holding)
+            client.update_holding(mms_id, holding_id, new_alma_holding)
             updated_holdings_count += 1
     print(f"Finished updating {updated_holdings_count} holdings.")
     print(f"Encountered {errored_holdings_count} errors.")
