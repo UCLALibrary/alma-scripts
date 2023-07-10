@@ -37,6 +37,7 @@ class Invoice:
             "FOREIGN",
             "HOLD",
             "PACKAGE",
+            "PCARD",
             "RECHARGE",
             "REFUND",
             "REIMBURSE",
@@ -54,7 +55,6 @@ class Invoice:
         elif self.data["vck"] is None:
             validation_message = "No VCK"
             valid = False
-
         # Some of these are created by LBS, some not
         invoice_ref_number = self.data["invoice_ref_num"]
         for prefix in unwanted_prefixes:
@@ -62,12 +62,6 @@ class Invoice:
                 validation_message = f"Unwanted prefix: {prefix}"
                 valid = False
                 break
-        # Procard: starts with 5, then 3 digits, then 3 upper letters,
-        # then at least one digit
-        procard_regex = "^5[0-9]{3}[A-Z]{3}[0-9]"
-        if re.search(procard_regex, invoice_number):
-            validation_message = "Unwanted Procard"
-            valid = False
         # Are the totals correct (probably)?
         # if not self._check_totals():
         # 	validation_message = f'Totals do not match'
