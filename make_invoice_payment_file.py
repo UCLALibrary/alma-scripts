@@ -64,7 +64,21 @@ def main():
     xml = get_xml_header()
     # Windows-derived CSV has leading BOM, so specify utf-8-sig, not utf-8
     with open(input_file, encoding="utf-8-sig", newline="") as csv_file:
-        reader = csv.DictReader(csv_file, dialect="excel")
+        # LBS-supplied field names vary, so be explicit with what's expected.
+        field_names = [
+            "Vendor Code",
+            "Vendor ID",
+            "Invoice Number",
+            "Invoice Date",
+            "Invoice Gross Amount",
+            "Transaction Amount",
+            "Check Number",
+            "Check Date",
+        ]
+        reader = csv.DictReader(csv_file, fieldnames=field_names, dialect="excel")
+        # Skip first row, since it has LBS-supplied field names we're not using.
+        next(reader)
+        # Now iterate over the remaining (real) rows.
         for row in reader:
             # Skip "empty" rows which should not be in the data...
             if row["Vendor Code"] != "":
