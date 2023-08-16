@@ -309,3 +309,24 @@ class AlmaAPIClient:
             parameters = {}
         api = f"/almaws/v1/conf/libraries/{library_code}/circ-desks/"
         return self._call_get_api(api, parameters)
+
+    def get_funds(self, parameters: dict = None) -> dict:
+        """Return data about all funds matching search in parameters."""
+        if parameters is None:
+            parameters = {}
+        api = "/almaws/v1/acq/funds"
+        return self._call_get_api(api, parameters)
+
+    def get_fund(self, fund_id: str, parameters: dict = None) -> dict:
+        """Return data about a specific fund."""
+        if parameters is None:
+            parameters = {}
+        api = f"/almaws/v1/acq/funds/{fund_id}"
+        return self._call_get_api(api, parameters)
+
+    def update_fund(self, fund_id: str, fund: dict, parameters: dict = None) -> dict:
+        """Update a specific fund."""
+        if parameters is None:
+            parameters = {}
+        api = f"/almaws/v1/acq/funds/{fund_id}"
+        return self._call_put_api(api, fund, parameters)
