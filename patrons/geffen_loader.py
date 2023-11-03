@@ -17,7 +17,9 @@ def _get_geffen_data() -> dict:
     with open("Geffen_Students.txt") as f:
         for line in csv.reader(f):
             if line:
-                primary_id = line[1]
+                # Campus data drops leading zero from 9-digit UID;
+                # left-pad with 0 as needed.
+                primary_id = line[1].rjust(9, "0")
                 patron = {
                     "PRIMARY_ID": primary_id,
                     "BARCODE": primary_id + line[0],
