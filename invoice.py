@@ -54,6 +54,9 @@ class Invoice:
         elif self.data["vck"] is None:
             validation_message = "No VCK"
             valid = False
+        # VCK is not 9 characters
+        elif len(self.data["vck"]) != 9:
+            validation_message = f'VCK is wrong length: {self.data["vck"]}'
         # Some of these are created by LBS, some not
         invoice_ref_number = self.data["invoice_ref_num"]
         for prefix in unwanted_prefixes:
