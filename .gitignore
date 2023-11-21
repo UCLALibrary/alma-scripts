@@ -6,6 +6,7 @@ __pycache__
 *.dict
 *.json
 *.lst
+*.mrc
 *.out
 *.tsv
 *.txt
