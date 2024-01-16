@@ -193,7 +193,12 @@ def _get_registrar_data(registrar_file):
             student = ast.literal_eval(line)
             # Registrar data is space-padded; get rid of those extra spaces
             for key, val in student.items():
-                student[key] = val.strip()
+                try:
+                    student[key] = val.strip()
+                except AttributeError:
+                    print(
+                        f"Invalid data for student {student['STU_ID']}: {key} -> {val}"
+                    )
 
             # Most data is not relevant; get just what's needed,
             # renaming for consistency with non-student data.
