@@ -76,15 +76,15 @@ def insert_ebookplates(alma_api_key: str, report: list) -> tuple[int, int, int]:
         pymarc_record = get_pymarc_record_from_bib(alma_bib)
 
         # first check for existing 966, matching on $a
-        if is_not_duplicate_966(pymarc_record, spac_name):
+        if is_not_duplicate_966(pymarc_record, spac_code):
             subfields = []
-            # always have spac name in $a
-            subfields.append(Subfield(code="a", value=spac_name))
-            # add $b if it exists
+            # always have spac code in $a and name in $b, plus $9LOCAL to avoid overwrite
+            subfields.append(Subfield(code="a", value=spac_code))
+            subfields.append(Subfield(code="b", value=spac_name))
+            subfields.append(Subfield(code="9", value="LOCAL"))
+            # add $c if it exists
             if spac_url:
-                subfields.append(Subfield(code="b", value=spac_url))
-            print("SUBFIELDS")
-            print(subfields)
+                subfields.append(Subfield(code="c", value=spac_url))
             pymarc_record.add_field(
                 Field(
                     tag="966",
@@ -96,22 +96,22 @@ def insert_ebookplates(alma_api_key: str, report: list) -> tuple[int, int, int]:
             # repackage Alma bib and send update
             new_alma_bib = prepare_bib_for_update(alma_bib, pymarc_record)
             client.update_bib(mms_id, new_alma_bib)
-            print(f"Added SPAC to bib. MMS ID: {mms_id}, SPAC Name: {spac_name}")
+            # print(f"Added SPAC to bib. MMS ID: {mms_id}, SPAC Name: {spac_name}")
             total_updated += 1
 
         # print extra info if a duplicate 966 is found
         else:
             print(
-                f"Skipped bib with existing 966 SPAC. MMS ID: {mms_id}, SPAC Name: {spac_name}"
+                f"Skipped bib with existing 966 SPAC. MMS ID: {mms_id}, SPAC Code: {spac_code}"
             )
             total_skipped += 1
 
     return total_updated, total_skipped, total_errored
 
 
-def is_not_duplicate_966(old_record: Record, spac_name: str) -> bool:
+def is_not_duplicate_966(old_record: Record, spac_code: str) -> bool:
     for field_966 in old_record.get_fields("966"):
-        if spac_name in field_966.get_subfields("a"):
+        if spac_code in field_966.get_subfields("a"):
             return False
     return True
 
@@ -127,13 +127,22 @@ def main():
     if args.environment == "sandbox":
         # test data for sandbox environment
         report_data = [
+            # case 1: Bob Barker fund, no URL
             {
-                "MMS Id": "9996854839106533",
-                "Fund Ledger Code": "2SC010",
+                "MMS Id": "9911656853606533",
+                "Fund Code": "2LW003",
                 "Transaction Date": "2022-04-15T00:00:00",
                 "Transaction Item Type": "EXPENDITURE",
                 "Invoice-Number": "9300014049",
-            }
+            },
+            # case 2: Edgar Bowers fund, with URL
+            {
+                "MMS Id": "9990572683606533",
+                "Fund Code": "2SC002",
+                "Transaction Date": "2022-04-15T00:00:00",
+                "Transaction Item Type": "EXPENDITURE",
+                "Invoice-Number": "9300014049",
+            },
         ]
         alma_api_key = API_KEYS["SANDBOX"]
 
