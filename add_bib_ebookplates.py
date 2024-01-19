@@ -5,7 +5,7 @@ from alma_api_keys import API_KEYS
 from alma_api_client import AlmaAPIClient
 from alma_analytics_client import AlmaAnalyticsClient
 from alma_marc import get_pymarc_record_from_bib, prepare_bib_for_update
-from pymarc import Field, Record
+from pymarc import Field, Record, Subfield
 
 
 def get_fund_code_report(analytics_api_key: str) -> list:
@@ -32,12 +32,11 @@ def get_ebookplates(report: list, input_file: str) -> list:
     new_report = []
     for item in report:
         for line in spac_mappings:
-            if line["Alma Fund Code"] == item["Fund Ledger Code"]:
+            if line["Alma Fund Code"] == item["Fund Code"]:
                 current_item = copy.deepcopy(item)
                 current_item["spac_code"] = line["SPAC_CODE"]
                 current_item["spac_name"] = line["SPAC_NAME"]
                 current_item["spac_url"] = line["E-bookplate link"]
-                current_item["spac_image"] = line["Bookplate Image Link"]
                 new_report.append(current_item)
 
     # sanity check - same number of items before and after SPAC mapping?
@@ -59,10 +58,9 @@ def insert_ebookplates(alma_api_key: str, report: list) -> tuple[int, int, int]:
     for item in report:
         mms_id = item["MMS Id"]
         spac_name = item["spac_name"]
-        # spac_url will be an empty string for some SPACs - this is ok!
+        spac_code = item["spac_code"]
+        # spac_url will be an empty string for non-bookplate SPACs
         spac_url = item["spac_url"]
-        # placeholder text for now - this will eventually vary with each SPAC
-        spac_image = item["spac_image"]
 
         # get bib from Alma
         alma_bib = client.get_bib(mms_id).get("content")
@@ -77,18 +75,19 @@ def insert_ebookplates(alma_api_key: str, report: list) -> tuple[int, int, int]:
         # convert to Pymarc to handle fields and subfields
         pymarc_record = get_pymarc_record_from_bib(alma_bib)
 
-        # first check for existing 967, matching on $a
-        if is_not_duplicate_967(pymarc_record, spac_name):
+        # first check for existing 966, matching on $a
+        if is_not_duplicate_966(pymarc_record, spac_name):
+            subfields = []
             # always have spac name in $a
-            subfields = ["a", spac_name]
-            # add $b and $c if they exist
+            subfields.append(Subfield(code="a", value=spac_name))
+            # add $b if it exists
             if spac_url:
-                subfields.extend(["b", spac_url])
-            if spac_image:
-                subfields.extend(["c", spac_image])
+                subfields.append(Subfield(code="b", value=spac_url))
+            print("SUBFIELDS")
+            print(subfields)
             pymarc_record.add_field(
                 Field(
-                    tag="967",
+                    tag="966",
                     # alma_marc.prepare_bib_for_update needs indicators explicitly set
                     indicators=[" ", " "],
                     subfields=subfields,
@@ -100,19 +99,19 @@ def insert_ebookplates(alma_api_key: str, report: list) -> tuple[int, int, int]:
             print(f"Added SPAC to bib. MMS ID: {mms_id}, SPAC Name: {spac_name}")
             total_updated += 1
 
-        # print extra info if a duplicate 967 is found
+        # print extra info if a duplicate 966 is found
         else:
             print(
-                f"Skipped bib with existing 967 SPAC. MMS ID: {mms_id}, SPAC Name: {spac_name}"
+                f"Skipped bib with existing 966 SPAC. MMS ID: {mms_id}, SPAC Name: {spac_name}"
             )
             total_skipped += 1
 
     return total_updated, total_skipped, total_errored
 
 
-def is_not_duplicate_967(old_record: Record, spac_name: str) -> bool:
-    for field_967 in old_record.get_fields("967"):
-        if spac_name in field_967.get_subfields("a"):
+def is_not_duplicate_966(old_record: Record, spac_name: str) -> bool:
+    for field_966 in old_record.get_fields("966"):
+        if spac_name in field_966.get_subfields("a"):
             return False
     return True
 
@@ -142,7 +141,6 @@ def main():
         analytics_api_key = API_KEYS["DIIT_ANALYTICS"]
         alma_api_key = API_KEYS["DIIT_SCRIPTS"]
         report_data = get_fund_code_report(analytics_api_key)
-
     print(f"Beginning processing {len(report_data)} bib e-bookplates")
     print()
 
@@ -155,7 +153,7 @@ def main():
     print(
         "Finished adding ebookplates. ",
         f"{total_updated} bibs updated. ",
-        f"{total_skipped} bibs skipped due to duplicate 967s.",
+        f"{total_skipped} bibs skipped due to duplicate 966s.",
         f"{total_errored} bibs skipped due to errors.",
     )
 
