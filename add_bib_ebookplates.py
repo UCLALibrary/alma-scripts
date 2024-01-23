@@ -75,8 +75,9 @@ def insert_ebookplates(alma_api_key: str, report: list) -> tuple[int, int, int]:
         # convert to Pymarc to handle fields and subfields
         pymarc_record = get_pymarc_record_from_bib(alma_bib)
 
-        # first check for existing 966, matching on $a
+        # first check for existing 966, matching all of $a, $b, and $c
         if is_not_duplicate_966(pymarc_record, spac_code):
+            # TODO: determine behavior for existing 966 with different $b or $c
             subfields = []
             # always have spac code in $a and name in $b, plus $9LOCAL to avoid overwrite
             subfields.append(Subfield(code="a", value=spac_code))
@@ -109,9 +110,15 @@ def insert_ebookplates(alma_api_key: str, report: list) -> tuple[int, int, int]:
     return total_updated, total_skipped, total_errored
 
 
-def is_not_duplicate_966(old_record: Record, spac_code: str) -> bool:
+def is_not_duplicate_966(
+    old_record: Record, spac_code: str, spac_name: str, spac_url: str
+) -> bool:
     for field_966 in old_record.get_fields("966"):
-        if spac_code in field_966.get_subfields("a"):
+        if (
+            spac_code in field_966.get_subfields("a")
+            and spac_name in field_966.get_subfields("b")
+            and spac_url in field_966.get_subfields("c")
+        ):
             return False
     return True
 
