@@ -87,6 +87,8 @@ def main():
                 except ValueError as ex:
                     sys.stderr.write(f"{ex}\n")
                     sys.stderr.write(f"{row}\n")
+            else:
+                sys.stderr.write(f"No vendor code: {row}\n")
         xml += get_xml_footer()
     print(xml)
 
