@@ -141,7 +141,7 @@ def main():
         report_data = [
             # case 1: SPAC1, with URL
             {
-                "MMS Id": "99131656853606533",
+                "MMS Id": "9911656853606533",
                 "Fund Code": "FUND1",
                 "Transaction Date": "2022-04-15T00:00:00",
                 "Transaction Item Type": "EXPENDITURE",
@@ -205,8 +205,6 @@ def main():
 
         if is_new_966(pymarc_record, spac_code, spac_name):
             add_new_966(pymarc_record, spac_code, spac_name, spac_url)
-            new_alma_bib = prepare_bib_for_update(alma_bib, pymarc_record)
-            client.update_bib(mms_id, new_alma_bib)
             logging.debug(
                 f"Added SPAC to bib. MMS ID: {mms_id}, SPAC Name: {spac_name}"
             )
@@ -220,12 +218,12 @@ def main():
                         f" MMS ID: {mms_id}, SPAC Name: {spac_name}, URL: {spac_url}",
                     )
                     bib_was_updated = True
-            new_alma_bib = prepare_bib_for_update(alma_bib, pymarc_record)
-            client.update_bib(mms_id, new_alma_bib)
 
         if bib_was_updated:
+            new_alma_bib = prepare_bib_for_update(alma_bib, pymarc_record)
+            client.update_bib(mms_id, new_alma_bib)
             total_bibs_updated += 1
-        else:  # bib was skipped
+        else:
             total_bibs_skipped += 1
 
         # every 5% of records, log progress
