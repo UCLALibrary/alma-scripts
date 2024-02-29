@@ -64,7 +64,7 @@ def get_report_ebookplates(report: list, input_file: str) -> list:
     return new_report
 
 
-def is_new_966(old_record: Record, spac_code: str, spac_name: str) -> bool:
+def is_new_966(old_record: Record, spac_code: str) -> bool:
     """Check all 966 fields in a record to see if a new 966 field is needed."""
     for field_966 in old_record.get_fields("966"):
         # match only subfield a
@@ -193,7 +193,7 @@ def main():
         # convert to Pymarc to handle fields and subfields
         pymarc_record = get_pymarc_record_from_bib(alma_bib)
 
-        if is_new_966(pymarc_record, spac_code, spac_name):
+        if is_new_966(pymarc_record, spac_code):
             add_new_966(pymarc_record, spac_code, spac_name, spac_url)
             logging.debug(
                 f"Added new bookplate to bib. MMS ID: {mms_id}, SPAC Name: {spac_name}"

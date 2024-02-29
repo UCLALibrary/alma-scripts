@@ -60,40 +60,21 @@ class TestAddBibEbookplates(unittest.TestCase):
     def test_is_new_966_original_empty(self):
         record = Record()
         spac_code = "SPAC"
-        spac_name = "SPAC Name"
-        self.assertTrue(is_new_966(record, spac_code, spac_name))
+        self.assertTrue(is_new_966(record, spac_code))
 
     def test_is_new_966_exact_match(self):
         record = Record()
         spac_code = "SPAC"
-        spac_name = "SPAC Name"
         record.add_field(
             Field(
                 tag="966",
                 indicators=[" ", " "],
                 subfields=[
                     Subfield(code="a", value=spac_code),
-                    Subfield(code="b", value=spac_name),
                 ],
             )
         )
-        self.assertFalse(is_new_966(record, spac_code, spac_name))
-
-    def test_is_new_966_match_a_only(self):
-        record = Record()
-        spac_code = "SPAC"
-        spac_name = "SPAC Name"
-        record.add_field(
-            Field(
-                tag="966",
-                indicators=[" ", " "],
-                subfields=[
-                    Subfield(code="a", value=spac_code),
-                    Subfield(code="b", value="Different Name"),
-                ],
-            )
-        )
-        self.assertFalse(is_new_966(record, spac_code, spac_name))
+        self.assertFalse(is_new_966(record, spac_code))
 
     def test_needs_bookplate_update_no_matching_ab(self):
         old_field = Field(
