@@ -67,22 +67,19 @@ def get_report_ebookplates(report: list, input_file: str) -> list:
 def is_new_966(old_record: Record, spac_code: str, spac_name: str) -> bool:
     """Check all 966 fields in a record to see if a new 966 field is needed."""
     for field_966 in old_record.get_fields("966"):
-        # match only subfields a and b
-        if spac_code in field_966.get_subfields(
-            "a"
-        ) and spac_name in field_966.get_subfields("b"):
+        # match only subfield a
+        if spac_code in field_966.get_subfields("a"):
             return False
     return True
 
 
-def needs_URL_update(
+def needs_bookplate_update(
     old_field: Field, spac_code: str, spac_name: str, spac_url: str
 ) -> bool:
-    """Check if a 966 field matches the SPAC code and name, but needs a URL update."""
-    # First, match on subfields a and b. If no match, this field doesn't need updating.
-    if (spac_code not in old_field.get_subfields("a")) or (
-        spac_name not in old_field.get_subfields("b")
-    ):
+    """Check if a 966 field matches the SPAC code, but needs an update to URL or name."""
+    # First, match on subfield a. If no match, this field doesn't need updating.
+    # get_subfields returns a list, we expect only one $a,b,c per 966 field
+    if spac_code != old_field.get_subfields("a")[0]:
         return False
     # If the new URL is an empty string, check if $c exists. If it does, update is needed.
     elif (not spac_url) and (old_field.get_subfields("c")):
@@ -93,9 +90,11 @@ def needs_URL_update(
         if not old_field.get_subfields("c"):
             return True
         # otherwise, compare the URL in the 966 field to the new URL
-        # get_subfields returns a list, we expect only one $c per 966 field
         if spac_url != old_field.get_subfields("c")[0]:
             return True
+    # Now check if the bookplate text needs updating
+    if spac_name != old_field.get_subfields("b")[0]:
+        return True
 
 
 def add_new_966(record: Record, spac_code: str, spac_name: str, spac_url: str) -> None:
@@ -115,9 +114,12 @@ def add_new_966(record: Record, spac_code: str, spac_name: str, spac_url: str) -
     )
 
 
-def update_existing_966(field_966: Field, spac_url: str) -> None:
-    """Update the URL in an existing 966 field."""
-    # update the $c subfield
+def update_existing_966(field_966: Field, spac_name: str, spac_url: str) -> None:
+    """Update the URL and bookplate text in an existing 966 field."""
+    # update $b for bookplate text
+    field_966.delete_subfield("b")
+    field_966.add_subfield("b", spac_name)
+    # update $c for URL
     field_966.delete_subfield("c")
     # if spac_url is an empty string, don't add $c back in
     if spac_url:
@@ -140,7 +142,7 @@ def main():
         # these MMS IDs are real, but fund codes are fake to align with test SPAC mappings file
         report_data = [
             # case 1: SPAC1, with URL
-            {"MMS Id": "9911656853606533", "Fund Code": "FUND1"},
+            {"MMS Id": "9911656853606533", "Fund Code": "FUND2A"},
             # case 2: SPAC3, no URL
             {"MMS Id": "9990572683606533", "Fund Code": "FUND3"},
         ]
@@ -194,16 +196,15 @@ def main():
         if is_new_966(pymarc_record, spac_code, spac_name):
             add_new_966(pymarc_record, spac_code, spac_name, spac_url)
             logging.debug(
-                f"Added SPAC to bib. MMS ID: {mms_id}, SPAC Name: {spac_name}"
+                f"Added new bookplate to bib. MMS ID: {mms_id}, SPAC Name: {spac_name}"
             )
             bib_was_updated = True
         else:
             for field_966 in pymarc_record.get_fields("966"):
-                if needs_URL_update(field_966, spac_code, spac_name, spac_url):
-                    update_existing_966(field_966, spac_url)
+                if needs_bookplate_update(field_966, spac_code, spac_name, spac_url):
+                    update_existing_966(field_966, spac_name, spac_url)
                     logging.debug(
-                        "Updated SPAC URL. ",
-                        f" MMS ID: {mms_id}, SPAC Name: {spac_name}, URL: {spac_url}",
+                        f"Updated bookplate. MMS ID: {mms_id}, SPAC Name: {spac_name}",
                     )
                     bib_was_updated = True
 

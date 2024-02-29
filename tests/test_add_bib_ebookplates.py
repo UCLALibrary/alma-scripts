@@ -3,7 +3,7 @@ from pymarc import Field, Record, Subfield
 from add_bib_ebookplates import (
     get_report_ebookplates,
     is_new_966,
-    needs_URL_update,
+    needs_bookplate_update,
     add_new_966,
     update_existing_966,
 )
@@ -93,9 +93,9 @@ class TestAddBibEbookplates(unittest.TestCase):
                 ],
             )
         )
-        self.assertTrue(is_new_966(record, spac_code, spac_name))
+        self.assertFalse(is_new_966(record, spac_code, spac_name))
 
-    def test_needs_URL_update_no_matching_ab(self):
+    def test_needs_bookplate_update_no_matching_ab(self):
         old_field = Field(
             tag="966",
             indicators=[" ", " "],
@@ -110,9 +110,11 @@ class TestAddBibEbookplates(unittest.TestCase):
         spac_url = "https://example.com"
 
         # This is a new 966 field, so it doesn't need updating
-        self.assertFalse(needs_URL_update(old_field, spac_code, spac_name, spac_url))
+        self.assertFalse(
+            needs_bookplate_update(old_field, spac_code, spac_name, spac_url)
+        )
 
-    def test_needs_URL_update_no_original_c(self):
+    def test_needs_bookplate_update_no_original_c(self):
         old_field = Field(
             tag="966",
             indicators=[" ", " "],
@@ -126,9 +128,11 @@ class TestAddBibEbookplates(unittest.TestCase):
         spac_url = "https://example.com"
 
         # We will need to update the URL, since the original 966 field has no $c subfield
-        self.assertTrue(needs_URL_update(old_field, spac_code, spac_name, spac_url))
+        self.assertTrue(
+            needs_bookplate_update(old_field, spac_code, spac_name, spac_url)
+        )
 
-    def test_needs_URL_update_empty_new_url(self):
+    def test_needs_bookplate_update_empty_new_url(self):
         old_field = Field(
             tag="966",
             indicators=[" ", " "],
@@ -143,9 +147,11 @@ class TestAddBibEbookplates(unittest.TestCase):
         spac_url = ""
 
         # We will need to update the URL, since the new URL is empty
-        self.assertTrue(needs_URL_update(old_field, spac_code, spac_name, spac_url))
+        self.assertTrue(
+            needs_bookplate_update(old_field, spac_code, spac_name, spac_url)
+        )
 
-    def test_needs_URL_update_new_url_mismatch(self):
+    def test_needs_bookplate_update_new_url_mismatch(self):
         old_field = Field(
             tag="966",
             indicators=[" ", " "],
@@ -160,7 +166,28 @@ class TestAddBibEbookplates(unittest.TestCase):
         spac_url = "https://newexample.com"
 
         # We will need to update the URL, since the new URL doesn't match the original
-        self.assertTrue(needs_URL_update(old_field, spac_code, spac_name, spac_url))
+        self.assertTrue(
+            needs_bookplate_update(old_field, spac_code, spac_name, spac_url)
+        )
+
+    def test_needs_bookplate_update_new_name_mismatch(self):
+        old_field = Field(
+            tag="966",
+            indicators=[" ", " "],
+            subfields=[
+                Subfield(code="a", value="SPAC"),
+                Subfield(code="b", value="SPAC Name"),
+                Subfield(code="c", value="https://example.com"),
+            ],
+        )
+        spac_code = "SPAC"
+        spac_name = "Different SPAC Name"
+        spac_url = "https://example.com"
+
+        # We will need to update the bookplate text, since the new name doesn't match the original
+        self.assertTrue(
+            needs_bookplate_update(old_field, spac_code, spac_name, spac_url)
+        )
 
     def test_add_new_966(self):
         old_record = Record()
@@ -190,8 +217,10 @@ class TestAddBibEbookplates(unittest.TestCase):
             ],
         )
         spac_url = "https://newexample.com"
-        update_existing_966(old_field, spac_url)
+        spac_name = "SPAC Name"
+        update_existing_966(old_field, spac_name, spac_url)
         self.assertEqual(old_field.get_subfields("c")[0], spac_url)
+        self.assertEqual(old_field.get_subfields("b")[0], spac_name)
 
     def test_update_existing_966_remove_URL(self):
         old_field = Field(
@@ -204,7 +233,8 @@ class TestAddBibEbookplates(unittest.TestCase):
             ],
         )
         spac_url = ""
-        update_existing_966(old_field, spac_url)
+        spac_name = "SPAC Name"
+        update_existing_966(old_field, spac_name, spac_url)
         self.assertEqual(old_field.get_subfields("c"), [])
 
 
