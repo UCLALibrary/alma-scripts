@@ -1,11 +1,5 @@
-import sys
 import unittest
 from pymarc import Field, Record, Subfield
-
-
-# Add the path to the directory containing the add_bib_ebookplates script to sys.path
-sys.path.append("../")
-
 from add_bib_ebookplates import (
     get_report_ebookplates,
     is_new_966,
@@ -18,15 +12,9 @@ from add_bib_ebookplates import (
 class TestAddBibEbookplates(unittest.TestCase):
 
     def test_get_report_ebookplates(self):
-        sample_mapping_file = "data/sample_SPAC_mappings.csv"
+        sample_mapping_file = "tests/data/sample_SPAC_mappings.csv"
         sample_report_data = [
-            {
-                "MMS Id": "MMS1",
-                "Fund Code": "FUND1",
-                "Transaction Date": "2022-04-15T00:00:00",
-                "Transaction Item Type": "EXPENDITURE",
-                "Invoice-Number": "9300014049",
-            },
+            {"MMS Id": "MMS1", "Fund Code": "FUND1"},
         ]
         report_with_ebookplates = get_report_ebookplates(
             sample_report_data, sample_mapping_file
@@ -36,15 +24,9 @@ class TestAddBibEbookplates(unittest.TestCase):
         self.assertEqual(report_with_ebookplates[0]["spac_url"], "https://example.com")
 
     def test_get_report_ebookplates_no_url(self):
-        sample_mapping_file = "data/sample_SPAC_mappings.csv"
+        sample_mapping_file = "tests/data/sample_SPAC_mappings.csv"
         sample_report_data = [
-            {
-                "MMS Id": "MMS1",
-                "Fund Code": "FUND3",
-                "Transaction Date": "2022-04-15T00:00:00",
-                "Transaction Item Type": "EXPENDITURE",
-                "Invoice-Number": "9300014049",
-            },
+            {"MMS Id": "MMS1", "Fund Code": "FUND3"},
         ]
         report_with_ebookplates = get_report_ebookplates(
             sample_report_data, sample_mapping_file
@@ -54,22 +36,10 @@ class TestAddBibEbookplates(unittest.TestCase):
         self.assertEqual(report_with_ebookplates[0]["spac_url"], "")
 
     def test_get_report_ebookplates_multiple_funds_single_spac(self):
-        sample_mapping_file = "data/sample_SPAC_mappings.csv"
+        sample_mapping_file = "tests/data/sample_SPAC_mappings.csv"
         sample_report_data = [
-            {
-                "MMS Id": "MMS1",
-                "Fund Code": "FUND2A",
-                "Transaction Date": "2022-04-15T00:00:00",
-                "Transaction Item Type": "EXPENDITURE",
-                "Invoice-Number": "9300014049",
-            },
-            {
-                "MMS Id": "MMS2",
-                "Fund Code": "FUND2B",
-                "Transaction Date": "2022-04-15T00:00:00",
-                "Transaction Item Type": "EXPENDITURE",
-                "Invoice-Number": "9300014049",
-            },
+            {"MMS Id": "MMS1", "Fund Code": "FUND2A"},
+            {"MMS Id": "MMS2", "Fund Code": "FUND2B"},
         ]
         report_with_ebookplates = get_report_ebookplates(
             sample_report_data, sample_mapping_file

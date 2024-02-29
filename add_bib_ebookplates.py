@@ -8,7 +8,7 @@ from alma_analytics_client import AlmaAnalyticsClient
 from alma_marc import get_pymarc_record_from_bib, prepare_bib_for_update
 from pymarc import Field, Record, Subfield
 
-logging.basicConfig(filename="add_bib_ebookplates.log", level=logging.INFO)
+logging.basicConfig(filename="add_bib_ebookplates.log", level=logging.DEBUG)
 
 
 def get_fund_code_report(analytics_api_key: str) -> list:
@@ -140,21 +140,9 @@ def main():
         # these MMS IDs are real, but fund codes are fake to align with test SPAC mappings file
         report_data = [
             # case 1: SPAC1, with URL
-            {
-                "MMS Id": "9911656853606533",
-                "Fund Code": "FUND1",
-                "Transaction Date": "2022-04-15T00:00:00",
-                "Transaction Item Type": "EXPENDITURE",
-                "Invoice-Number": "9300014049",
-            },
+            {"MMS Id": "9911656853606533", "Fund Code": "FUND1"},
             # case 2: SPAC3, no URL
-            {
-                "MMS Id": "9990572683606533",
-                "Fund Code": "FUND3",
-                "Transaction Date": "2022-04-15T00:00:00",
-                "Transaction Item Type": "EXPENDITURE",
-                "Invoice-Number": "9300014049",
-            },
+            {"MMS Id": "9990572683606533", "Fund Code": "FUND3"},
         ]
         alma_api_key = API_KEYS["SANDBOX"]
 
@@ -225,6 +213,7 @@ def main():
             total_bibs_updated += 1
         else:
             total_bibs_skipped += 1
+            logging.debug(f"Skipping MMS ID {mms_id}. No 966 updates needed.")
 
         # every 5% of records, log progress
         total_bibs_processed = (
