@@ -55,12 +55,6 @@ def get_report_ebookplates(report: list, input_file: str) -> list:
                 current_item["spac_url"] = line["URL"]
                 new_report.append(current_item)
 
-    # sanity check - same number of items before and after SPAC mapping?
-    if len(report) != len(new_report):
-        quit(
-            """Mapping length mismatch. The mapping file may contain duplicate fund
-            codes, or may be missing fund codes. Please check inputs."""
-        )
     return new_report
 
 
