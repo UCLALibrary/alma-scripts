@@ -214,7 +214,9 @@ def main():
         total_bibs_processed = (
             total_bibs_updated + total_bibs_skipped + total_bibs_errored
         )
-        if total_bibs_processed % (len(report_with_ebookplates) // 20) == 0:
+        # Take 5%, round down, add 1 to avoid 0 when length < 20
+        progress_interval = (len(report_with_ebookplates) // 20) + 1
+        if total_bibs_processed % progress_interval == 0:
             logging.info(f"Processed {total_bibs_processed} bibs.")
 
     print()
