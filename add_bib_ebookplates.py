@@ -55,12 +55,6 @@ def get_report_ebookplates(report: list, input_file: str) -> list:
                 current_item["spac_url"] = line["URL"]
                 new_report.append(current_item)
 
-    # sanity check - same number of items before and after SPAC mapping?
-    if len(report) != len(new_report):
-        quit(
-            """Mapping length mismatch. The mapping file may contain duplicate fund
-            codes, or may be missing fund codes. Please check inputs."""
-        )
     return new_report
 
 
@@ -220,7 +214,7 @@ def main():
         total_bibs_processed = (
             total_bibs_updated + total_bibs_skipped + total_bibs_errored
         )
-        if total_bibs_processed % (len(report_with_ebookplates) / 20) == 0:
+        if total_bibs_processed % (len(report_with_ebookplates) // 20) == 0:
             logging.info(f"Processed {total_bibs_processed} bibs.")
 
     print()
