@@ -65,7 +65,7 @@ class TestAddBibEbookplates(unittest.TestCase):
         report_with_ebookplates = get_report_ebookplates(
             sample_report_data, sample_mapping_file
         )
-        # in mapping file, FUND3 maps to SPAC4 and SPAC5
+        # in mapping file, FUND4 maps to SPAC4 and SPAC5
         self.assertEqual(report_with_ebookplates[0]["spac_code"], "SPAC4")
         self.assertEqual(report_with_ebookplates[0]["spac_name"], "Bookplate Label #4")
         self.assertEqual(report_with_ebookplates[0]["spac_url"], "https://example.com")

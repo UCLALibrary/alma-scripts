@@ -126,7 +126,7 @@ def main():
     report_index = 0
 
     for item in report:
-        report_index += 1
+
         mms_id = item["MMS Id"]
         bib_was_updated = False
 
@@ -174,6 +174,8 @@ def main():
         # every 5% of records, log progress
         if report_index % (len(report) / 20) == 0:
             logging.info(f"Processed {report_index} bibs.")
+
+        report_index += 1
 
     print()
     print(
