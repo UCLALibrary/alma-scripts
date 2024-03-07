@@ -115,7 +115,7 @@ class TestUpdateBookplatesOneTime(unittest.TestCase):
 
     def test_get_spac_mappings(self):
         spac_mappings = get_spac_mappings("tests/data/sample_SPAC_mappings.csv")
-        # only two rows in the test file have a valid URL
+        # only four rows in the test file have a valid URL
         sample_mappings = [
             {
                 "SPAC": "SPAC1",
@@ -125,6 +125,16 @@ class TestUpdateBookplatesOneTime(unittest.TestCase):
             {
                 "SPAC": "SPAC2",
                 "NAME": "Bookplate Label #2",
+                "URL": "https://another-example.com",
+            },
+            {
+                "SPAC": "SPAC4",
+                "NAME": "Bookplate Label #4",
+                "URL": "https://example.com",
+            },
+            {
+                "SPAC": "SPAC5",
+                "NAME": "Bookplate Label #5",
                 "URL": "https://another-example.com",
             },
         ]

@@ -57,6 +57,25 @@ class TestAddBibEbookplates(unittest.TestCase):
             report_with_ebookplates[1]["spac_url"], "https://another-example.com"
         )
 
+    def test_get_report_ebookplates_multiple_spacs_single_fund(self):
+        sample_mapping_file = "tests/data/sample_SPAC_mappings.csv"
+        sample_report_data = [
+            {"MMS Id": "MMS1", "Fund Code": "FUND4"},
+        ]
+        report_with_ebookplates = get_report_ebookplates(
+            sample_report_data, sample_mapping_file
+        )
+        # in mapping file, FUND3 maps to SPAC4 and SPAC5
+        self.assertEqual(report_with_ebookplates[0]["spac_code"], "SPAC4")
+        self.assertEqual(report_with_ebookplates[0]["spac_name"], "Bookplate Label #4")
+        self.assertEqual(report_with_ebookplates[0]["spac_url"], "https://example.com")
+        self.assertEqual(report_with_ebookplates[1]["spac_code"], "SPAC5")
+        self.assertEqual(report_with_ebookplates[1]["spac_name"], "Bookplate Label #5")
+        self.assertEqual(
+            report_with_ebookplates[1]["spac_url"],
+            "https://another-example.com",
+        )
+
     def test_is_new_966_original_empty(self):
         record = Record()
         spac_code = "SPAC"
