@@ -172,7 +172,7 @@ def main():
             logging.info(f"Skipping MMS ID {mms_id}. No 966 updates needed.")
 
         # every 5% of records, log progress
-        if report_index % (len(report) / 20) == 0:
+        if report_index % (len(report) // 20) == 0:
             logging.info(f"Processed {report_index} bibs.")
 
         report_index += 1
