@@ -228,10 +228,12 @@ def main():
         total_bibs_processed = (
             total_bibs_updated + total_bibs_skipped + total_bibs_errored
         )
-        # Take 1%, round down, add 1 to avoid 0 when length < 20
+        # Take 1%, round down, add 1 to avoid 0 when length < 100
         progress_interval = (len(report_with_ebookplates) // 100) + 1
         if total_bibs_processed % progress_interval == 0:
-            logging.info(f"Processed {total_bibs_processed} bibs.")
+            logging.info(
+                f"Processed {total_bibs_processed} bibs. Last MMS ID: {mms_id}"
+            )
 
     logging.info("Finished adding ebookplates.")
     logging.info(f"{total_bibs_updated} bibs updated.")

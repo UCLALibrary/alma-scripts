@@ -178,13 +178,12 @@ def main():
             total_bibs_skipped += 1
             logging.info(f"Skipping MMS ID {mms_id}. No 966 updates needed.")
 
+        report_index += 1
         # every 1% of records, log progress
-        # Take 1%, round down, add 1 to avoid 0 when length < 20
+        # Take 1%, round down, add 1 to avoid 0 when length < 100
         progress_interval = (len(report) // 100) + 1
         if report_index % progress_interval == 0:
-            logging.info(f"Processed {report_index} bibs.")
-
-        report_index += 1
+            logging.info(f"Processed {report_index} bibs. Last MMS ID: {mms_id}")
 
     logging.info("Finished adding ebookplates.")
     logging.info(f"{total_bibs_updated} bibs updated.")
