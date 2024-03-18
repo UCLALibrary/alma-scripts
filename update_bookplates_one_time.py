@@ -7,8 +7,6 @@ from alma_analytics_client import AlmaAnalyticsClient
 from alma_marc import get_pymarc_record_from_bib, prepare_bib_for_update
 from pymarc import Field
 
-logging.basicConfig(filename="update_bookplates_one_time.log", level=logging.DEBUG)
-
 
 def get_mms_report(analytics_api_key: str) -> list:
     """Get the report of MMS IDs and current 966 contents from Alma Analytics."""
@@ -82,14 +80,24 @@ def main():
     )
     parser.add_argument(
         "environment",
-        help="Alma environment (sandbox or production), or 'debug' for a small test set.",
+        help="Alma environment (sandbox or production), or 'test' for a small test set.",
+    )
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Set the logging level",
     )
     parser.add_argument(
         "--start-index", type=int, help="Start processing report data at this index"
     )
     args = parser.parse_args()
 
-    if args.environment == "debug":
+    logging.basicConfig(filename="update_bookplates_one_time.log", level=args.log_level)
+    # always suppress urllib3 logs with lower level than WARNING
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+    if args.environment == "test":
         # test data for sandbox environment
         report = [
             {"MMS Id": "9911656853606533"},
@@ -112,8 +120,7 @@ def main():
     if args.start_index:
         report = report[args.start_index :]
 
-    print(f"Beginning processing {len(report)} bib e-bookplates")
-    print()
+    logging.info(f"Beginning processing {len(report)} bib e-bookplates")
 
     client = AlmaAPIClient(alma_api_key)
 
@@ -134,7 +141,7 @@ def main():
         alma_bib = client.get_bib(mms_id).get("content")
         # check for error in bib response, usually due to invalid MMS ID
         if b"errorsExist" in alma_bib:
-            logging.info(
+            logging.error(
                 f"Got an error finding bib record for MMS ID {mms_id}. Skipping this record."
             )
             total_bibs_errored += 1
@@ -171,21 +178,18 @@ def main():
             total_bibs_skipped += 1
             logging.info(f"Skipping MMS ID {mms_id}. No 966 updates needed.")
 
-        # every 5% of records, log progress
-        # Take 5%, round down, add 1 to avoid 0 when length < 20
-        progress_interval = (len(report) // 20) + 1
+        # every 1% of records, log progress
+        # Take 1%, round down, add 1 to avoid 0 when length < 20
+        progress_interval = (len(report) // 100) + 1
         if report_index % progress_interval == 0:
             logging.info(f"Processed {report_index} bibs.")
 
         report_index += 1
 
-    print()
-    print(
-        "Finished adding ebookplates. ",
-        f"{total_bibs_updated} bibs updated. ",
-        f"{total_bibs_skipped} bibs skipped with no 966 updates needed. ",
-        f"{total_bibs_errored} bibs skipped due to errors.",
-    )
+    logging.info("Finished adding ebookplates.")
+    logging.info(f"{total_bibs_updated} bibs updated.")
+    logging.info(f"{total_bibs_skipped} bibs skipped with no 966 updates needed.")
+    logging.info(f"{total_bibs_errored} bibs skipped due to errors.")
 
 
 if __name__ == "__main__":
