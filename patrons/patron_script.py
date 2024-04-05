@@ -202,21 +202,20 @@ def _get_registrar_data(registrar_file):
 
             # Most data is not relevant; get just what's needed,
             # renaming for consistency with non-student data.
-            # Only need CAREER[1], DIVISION[2], DEPT[7], DEGREE[3], CLASS[3]
-            # CAREER_REAL and HONORS_REAL included while porting
-            # from obsolete Voyager StudentLoader.
+            # Only need CAREER[1], DIVISION[2], DEPT[7], DEGREE[3], CLASS[3] for classification.
             primary_id = student["STU_ID"]
             patron = {
                 "PRIMARY_ID": primary_id,
                 "FULL_NAME": student["STU_NM"],
-                "CAREER_REAL": student["CAREER"],
+                "FIRST_NAME": student["FIRST_NAME"],
+                "MIDDLE_NAME": student["MIDDLE_NAME"],
+                "LAST_NAME": student["LAST_NAME"],
                 "CAREER": student["CAREER"][0],
                 "CLASS": student["CLASS"],
                 "DEGREE": student["DEG_CD"],
                 "DEPT": student["SR_DEPT_CD"],
                 "DIVISION": student["SR_DIV_CD"],
                 "EMAIL_ADDRESS": student["SS_EMAIL_ADDR"],
-                "HONORS_REAL": student["HONORS"],
                 "HONORS": student["SP_PGM2"],
             }
             # Registrar has address data which needs remapping for Alma
@@ -227,8 +226,6 @@ def _get_registrar_data(registrar_file):
                 if patron["ADDRESS_COUNTRY"] == "UNITED"
                 else patron["ADDRESS_COUNTRY"]
             )
-            # Registrar provides just full name; add name parts
-            patron.update(_split_patron_name(patron["FULL_NAME"]))
             # User group
             patron["USER_GROUP"] = _get_student_user_group(patron)
 
@@ -265,9 +262,11 @@ def _get_student_address(student):
             "ADDRESS_LINE2": student["M_STREET_2"],
             "ADDRESS_CITY": student["M_CITY_NAME"],
             # Registrar has these separate; take the first that exists
-            "ADDRESS_STATE_PROVINCE": student["M_STATE_CD"]
-            if student["M_STATE_CD"] != ""
-            else student["M_PROV_CD"],
+            "ADDRESS_STATE_PROVINCE": (
+                student["M_STATE_CD"]
+                if student["M_STATE_CD"] != ""
+                else student["M_PROV_CD"]
+            ),
             "ADDRESS_POSTAL_CODE": student["M_ZIP_CD"],
             "ADDRESS_COUNTRY": student["M_CNTRY7"],
             "PHONE_NUMBER": student["M_PHONE_NO"],
@@ -278,44 +277,17 @@ def _get_student_address(student):
             "ADDRESS_LINE2": student["P_STREET_2"],
             "ADDRESS_CITY": student["P_CITY_NAME"],
             # Registrar has these separate; take the first that exists
-            "ADDRESS_STATE_PROVINCE": student["P_STATE_CD"]
-            if student["P_STATE_CD"] != ""
-            else student["P_PROV_CD"],
+            "ADDRESS_STATE_PROVINCE": (
+                student["P_STATE_CD"]
+                if student["P_STATE_CD"] != ""
+                else student["P_PROV_CD"]
+            ),
             "ADDRESS_POSTAL_CODE": student["P_ZIP_CD"],
             "ADDRESS_COUNTRY": student["P_CNTRY7"],
             "PHONE_NUMBER": student["P_PHONE_NO"],
         }
 
     return address
-
-
-def _split_patron_name(full_name):
-    """
-    Splits combined 'LAST, FIRST MIDDLE...' into 3 values in a dictionary.
-    MIDDLE may contain multiple terms in one string;
-    FIRST and LAST will be single terms
-    """
-    # Registrar data is usually 'LAST, FIRST MIDDLE' - 'comma space',
-    # but may be multiple commas. May also be FIRST..LAST....
-    # asking reg for better data.
-    (last_name, separator, other_names) = full_name.partition(", ")
-    if last_name == full_name:
-        # No 'comma space'; assume name is FIRST MIDDLE(s) LAST or FIRST LAST.
-        names = full_name.split(" ")
-        first_name = names[0]
-        last_name = names[-1]
-        if len(names) >= 3:
-            middle_name = " ".join(names[1 : len(names) - 1])
-        else:
-            middle_name = ""
-    else:
-        (first_name, separator, middle_name) = other_names.partition(" ")
-    names = {
-        "FIRST_NAME": first_name,
-        "MIDDLE_NAME": middle_name,
-        "LAST_NAME": last_name,
-    }
-    return names
 
 
 def _get_full_name(patron):
