@@ -1,6 +1,6 @@
 import csv
 import sys
-from datetime import datetime as dt
+from dateutil import parser
 
 
 def get_xml_header() -> str:
@@ -19,8 +19,11 @@ def get_xml_footer() -> str:
 
 
 def get_yyyymmdd(date_string: str) -> str:
-    # Convert date_string "m/d/yyyy" to yyyymmdd
-    return dt.strptime(date_string, "%m/%d/%Y").strftime("%Y%m%d")
+    # Convert date_string to yyyymmdd format Alma's import needs.
+    # Format supplied by LBS varies... generally "m/d/yyyy" or "yyyy-mm-dd",
+    # so use dateutil.parser for easy flexibility.
+    date = parser.parse(date_string)
+    return date.strftime("%Y%m%d")
 
 
 def get_amount(amount_string: str) -> str:
