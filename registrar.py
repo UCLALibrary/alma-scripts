@@ -43,12 +43,18 @@ def main():
     stored_procedure = REGISTRAR["stored_procedure"]
     terms = get_terms()
 
+    # 20240506 akohler: Temporary workaround for data problem
+    # Get data just for current quarter, Spring
+    terms = ("24S", "24S")
+
     conn = pymssql.connect(server, username, password, database)
     cursor = conn.cursor(as_dict=True)
 
     cursor.callproc(stored_procedure, terms)
+
     # https://github.com/pymssql/pymssql/pull/134
-    cursor.nextset()
+    # 20240506: Apparently no longer necessary, though issue is still open...
+    # cursor.nextset()
 
     for row in cursor:
         print(row)
