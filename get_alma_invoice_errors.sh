@@ -2,9 +2,6 @@
 # Retrieve PAC invoice error file from campus SFTP server,
 # show contents (if any), and email message to users.
 
-# Our RHEL server has ancient default python; use modern-ish one.
-source /etc/profile.d/enablerh-python38.sh
-
 # Get file from SFTP server using python, since native sftp
 # client has no(?) support for password auth via command line.
 /home/exlsupport/alma-scripts/get_alma_invoice_errors.py
