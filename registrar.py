@@ -43,10 +43,6 @@ def main():
     stored_procedure = REGISTRAR["stored_procedure"]
     terms = get_terms()
 
-    # 20240506 akohler: Temporary workaround for data problem
-    # Get data just for current quarter, Spring
-    terms = ("24S", "24S")
-
     conn = pymssql.connect(server, username, password, database)
     cursor = conn.cursor(as_dict=True)
 
