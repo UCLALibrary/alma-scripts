@@ -177,7 +177,14 @@ def _get_ucpath_data(ucpath_file):
             patron["FULL_NAME"] = _get_full_name(patron)
             # User group
             patron["USER_GROUP"] = _get_employee_user_group(patron)
+            # Alma requires address line 1, but a few records only have line 2;
+            # if so, move line 2 to line 1.
+            if patron["ADDRESS_LINE1"] == "":
+                patron["ADDRESS_LINE1"] = patron["ADDRESS_LINE2"]
+                patron["ADDRESS_LINE2"] = ""
+
             ucpath_data[primary_id] = patron
+
     print(f"ucpath_data: {len(ucpath_data)}")
     return ucpath_data
 
