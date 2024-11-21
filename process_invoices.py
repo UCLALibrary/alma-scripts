@@ -79,13 +79,13 @@ def get_invoice_counters(response):
 
 def retrieve_alma_file(instance_id):
     # Alma-generated filename starts with instance_id, ends with .xml
-    pattern = re.compile("^" + instance_id + "-.*\.xml$")
+    pattern = re.compile("^" + instance_id + "-.*\\.xml$")
     # Local filename: today's YYYYMMDD.xml
 
     with pysftp.Connection(ALMA["server"], username=ALMA["user"]) as sftp:
+        local_file: str = None
         print("Connected")
         sftp.cwd("alma/erp")
-
         files = sftp.listdir()
         for file in files:
             # We only care about the file created by the specified job instance.
