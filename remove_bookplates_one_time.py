@@ -1,9 +1,12 @@
 import argparse
 import logging
 from alma_api_keys import API_KEYS
-from alma_api_client import AlmaAPIClient
+from alma_api_client import (
+    AlmaAPIClient,
+    get_pymarc_record_from_bib,
+    prepare_bib_for_update,
+)
 from alma_analytics_client import AlmaAnalyticsClient
-from alma_marc import get_pymarc_record_from_bib, prepare_bib_for_update
 from pymarc import Field
 
 
@@ -59,11 +62,6 @@ def main():
     report_data_966 = get_966_report(analytics_api_key)
     logging.info("Getting 856 report data")
     report_data_856 = get_856_report(analytics_api_key)
-
-    # limit to first 100 records in each report for testing
-    if args.environment == "sandbox":
-        report_data_966 = report_data_966[:100]
-        report_data_856 = report_data_856[:100]
 
     client = AlmaAPIClient(alma_api_key)
 
