@@ -24,9 +24,7 @@ def get_terms(use_date=datetime.today()):
         term_codes = ("S", "1")
     elif current_month in (7, 8, 9):
         # Summer (all) and Fall, for Law
-        # term_codes = ('1', 'F')
-        # term_codes = ('1', '1')
-        term_codes = ("F", "F")
+        term_codes = ("1", "F")
     elif current_month in (10, 11):
         # Fall only
         term_codes = ("F", "F")
@@ -46,13 +44,23 @@ def main():
     conn = pymssql.connect(server, username, password, database)
     cursor = conn.cursor(as_dict=True)
 
-    cursor.callproc(stored_procedure, terms)
+    # Registrar's procedure seems to have problems sometimes with multiple terms at once
+    # (despite requiring 2 values...) so iterate over them if different.
+    data = {}
+    if terms[0] == terms[1]:
+        cursor.callproc(stored_procedure, terms)
+        data = cursor.fetchall()
+    else:
+        cursor.callproc(stored_procedure, (terms[0], terms[0]))
+        data = cursor.fetchall()
+        cursor.callproc(stored_procedure, (terms[1], terms[1]))
+        data.extend(cursor.fetchall())
 
     # https://github.com/pymssql/pymssql/pull/134
     # 20240506: Apparently no longer necessary, though issue is still open...
     # cursor.nextset()
 
-    for row in cursor:
+    for row in data:
         print(row)
 
     conn.close()
