@@ -208,16 +208,18 @@ def main():
         xml_file = args.xml_file
 
     # Creates PAC file and returns its name
-    pac_file = create_pac_invoices(xml_file, args.dump_invoice)
-
-    # Upload PAC file to UCLA ITS sftp server
-    if args.skip_upload:
-        print(f"{pac_file} NOT uploaded")
-    else:
-        if os.path.exists(pac_file):
-            upload_pac_file(pac_file)
+    if xml_file:
+        pac_file = create_pac_invoices(xml_file, args.dump_invoice)
+        # Upload PAC file to UCLA ITS sftp server
+        if args.skip_upload:
+            print(f"{pac_file} NOT uploaded")
         else:
-            print(f"{pac_file} does not exist")
+            if os.path.exists(pac_file):
+                upload_pac_file(pac_file)
+            else:
+                print(f"{pac_file} does not exist")
+    else:
+        print("NO XML FILE TO PROCESS")
 
 
 if __name__ == "__main__":
