@@ -37,7 +37,11 @@ def get_966_report(analytics_api_key: str) -> list:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("environment", help="Alma environment (sandbox or production)")
+    parser.add_argument(
+        "environment",
+        choices=["sandbox", "production"],
+        help="Alma environment (sandbox or production)",
+    )
     parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
@@ -230,17 +234,21 @@ def remove_bookplates(
 
 def needs_966_removed(field_966: Field, bookplates_to_leave: list) -> bool:
     # only remove 966s that don't contain any of the SPACs in bookplates_to_leave in $a
+    subfields = field_966.get_subfields("a")
     for term in bookplates_to_leave:
-        if term in field_966.get_subfields("a"):
-            logging.info(f"Found {term} in 966 field")
-            return False
+        for subfield in subfields:
+            if term in subfield:
+                logging.info(f"Found {term} in 966 field")
+                return False
     return True
 
 
 def needs_856_removed(field_856: Field) -> bool:
     # only remove 856s that contain "Bookplate" in $3
-    if "Bookplate" in field_856.get_subfields("3"):
-        return True
+    subfields = field_856.get_subfields("3")
+    for subfield in subfields:
+        if "Bookplate" in subfield:
+            return True
     return False
 
 
