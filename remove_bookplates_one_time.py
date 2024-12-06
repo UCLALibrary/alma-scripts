@@ -8,31 +8,118 @@ from alma_api_client import (
 )
 from alma_analytics_client import AlmaAnalyticsClient
 from pymarc import Field
-from typing import Optional
 
 
-def get_856_report(analytics_api_key: str) -> list:
+def get_bookplates_report(analytics_api_key: str) -> list:
     # analytics only available in prod environment
     aac = AlmaAnalyticsClient(analytics_api_key)
     report_path = (
         "/shared/University of California Los Angeles (UCLA) 01UCS_LAL"
-        "/Cataloging/Reports/API/856 Bookplates to Remove"
+        "/Cataloging/Reports/API/Combined Bookplates to Remove"
     )
     aac.set_report_path(report_path)
     report = aac.get_report()
     return report
 
 
-def get_966_report(analytics_api_key: str) -> list:
-    # analytics only available in prod environment
-    aac = AlmaAnalyticsClient(analytics_api_key)
-    report_path = (
-        "/shared/University of California Los Angeles (UCLA) 01UCS_LAL"
-        "/Cataloging/Reports/API/966 Bookplates to Remove"
-    )
-    aac.set_report_path(report_path)
-    report = aac.get_report()
-    return report
+def needs_966_removed(field_966: Field, bookplates_to_leave: list) -> bool:
+    # only remove 966s that don't contain any of the SPACs in bookplates_to_leave in $a
+    subfields = field_966.get_subfields("a")
+    for term in bookplates_to_leave:
+        for subfield in subfields:
+            if term in subfield:
+                logging.info(f"Found {term} in 966 field")
+                return False
+    return True
+
+
+def needs_856_removed(field_856: Field) -> bool:
+    # only remove 856s that contain "Bookplate" in $3
+    subfields = field_856.get_subfields("3")
+    for subfield in subfields:
+        if "Bookplate" in subfield:
+            return True
+    return False
+
+
+def remove_bookplates(
+    report_data: list, client: AlmaAPIClient, bookplates_to_leave: list
+):
+    logging.info(f"Processing {len(report_data)} bookplates")
+    errored_holdings_count = 0
+    updated_holdings_count = 0
+    skipped_holdings_count = 0
+    for index, item in enumerate(report_data):
+        logging.info(f"Current report index: {index}")
+        mms_id = item["MMS Id"]
+        holding_id = item["Holding Id"]
+
+        alma_holding = client.get_holding(mms_id, holding_id).get("content")
+        # make sure we got a valid bib
+        if (
+            b"is not valid" in alma_holding
+            or b"INTERNAL_SERVER_ERROR" in alma_holding
+            or b"Search failed" in alma_holding
+            or alma_holding is None
+        ):
+            logging.error(
+                f"Error finding MMS ID {mms_id}, Holding ID {holding_id}. Skipping this record."
+            )
+            errored_holdings_count += 1
+
+        else:
+            # convert to Pymarc to handle fields and subfields
+            pymarc_record = get_pymarc_record_from_bib(alma_holding)
+            pymarc_966_fields = pymarc_record.get_fields("966")
+            pymarc_856_fields = pymarc_record.get_fields("856")
+            if not pymarc_966_fields and not pymarc_856_fields:
+                logging.info(
+                    f"No 966 or 856 found for MMS ID {mms_id}, Holding ID {holding_id}"
+                )
+                skipped_holdings_count += 1
+            else:
+                for field_966 in pymarc_966_fields:
+                    if needs_966_removed(field_966, bookplates_to_leave):
+                        pymarc_record.remove_field(field_966)
+                        logging.info(
+                            f"Removing 966 bookplate from MMS ID {mms_id}, "
+                            f"Holding ID {holding_id}"
+                        )
+                    else:
+                        logging.info(
+                            f"Not removing 966 bookplate from MMS ID {mms_id}, "
+                            f"Holding ID {holding_id}",
+                        )
+                for field_856 in pymarc_856_fields:
+                    if needs_856_removed(field_856):
+                        pymarc_record.remove_field(field_856)
+                        logging.info(
+                            f"Removing 856 bookplate from MMS ID {mms_id}, "
+                            f"Holding ID {holding_id}"
+                        )
+                    else:
+                        logging.info(
+                            f"Not removing 856 bookplate from MMS ID {mms_id}, "
+                            f"Holding ID {holding_id}",
+                        )
+
+                # check if any changes were made
+                if pymarc_record == get_pymarc_record_from_bib(alma_holding):
+                    logging.info(
+                        f"No changes made to MMS ID {mms_id}, Holding ID {holding_id}"
+                    )
+                    skipped_holdings_count += 1
+                else:
+                    # convert back to Alma Holding and send update
+                    new_alma_holding = prepare_bib_for_update(
+                        alma_holding, pymarc_record
+                    )
+                    client.update_holding(mms_id, holding_id, new_alma_holding)
+                    updated_holdings_count += 1
+    logging.info("Finished Bookplate Updates")
+    logging.info(f"Total Holdings Updated: {updated_holdings_count}")
+    logging.info(f"Total Holdings Skipped: {skipped_holdings_count}")
+    logging.info(f"Total Holdings Errored: {errored_holdings_count}")
 
 
 def main():
@@ -49,16 +136,10 @@ def main():
         help="Set the logging level",
     )
     parser.add_argument(
-        "--start-index-966-report",
+        "--start-index",
         type=int,
         default=0,
-        help="Start index for 966 report",
-    )
-    parser.add_argument(
-        "--start-index-856-report",
-        type=int,
-        default=0,
-        help="Start index for 856 report",
+        help="Start index for the bookplates report",
     )
     parser.add_argument(
         "--limit",
@@ -81,19 +162,15 @@ def main():
         analytics_api_key = API_KEYS["DIIT_ANALYTICS"]
         alma_api_key = API_KEYS["DIIT_SCRIPTS"]
 
-    logging.info("Getting 966 report data")
-    report_data_966 = get_966_report(analytics_api_key)
-    logging.info("Getting 856 report data")
-    report_data_856 = get_856_report(analytics_api_key)
+    logging.info("Getting bookplate report data")
+    report_data = get_bookplates_report(analytics_api_key)
 
     # start at index specified in args
-    report_data_966 = report_data_966[args.start_index_966_report :]
-    report_data_856 = report_data_856[args.start_index_856_report :]
+    report_data = report_data[args.start_index :]
 
     # if a limit is specified, only process that many records
     if args.limit:
-        report_data_966 = report_data_966[: args.limit]
-        report_data_856 = report_data_856[: args.limit]
+        report_data = report_data[: args.limit]
 
     client = AlmaAPIClient(alma_api_key)
 
@@ -149,107 +226,7 @@ def main():
         "WIF",
     ]
 
-    remove_bookplates(report_data_856, "856", client)
-    remove_bookplates(report_data_966, "966", client, bookplates_to_leave_966)
-
-    logging.info("Script Complete")
-
-
-def remove_bookplates(
-    report_data: list,
-    marc_field_number: str,
-    client: AlmaAPIClient,
-    bookplates_to_leave: Optional[list] = [],
-):
-    logging.info(f"Processing {len(report_data)} {marc_field_number} bookplates")
-    errored_holdings_count = 0
-    updated_holdings_count = 0
-    skipped_holdings_count = 0
-    for index, item in enumerate(report_data):
-        logging.info(f"Current {marc_field_number} report index: {index}")
-        mms_id = item["MMS Id"]
-        holding_id = item["Holding Id"]
-
-        alma_holding = client.get_holding(mms_id, holding_id).get("content")
-        # make sure we got a valid bib
-        if (
-            b"is not valid" in alma_holding
-            or b"INTERNAL_SERVER_ERROR" in alma_holding
-            or b"Search failed" in alma_holding
-            or alma_holding is None
-        ):
-            logging.error(
-                f"Error finding MMS ID {mms_id}, Holding ID {holding_id}. Skipping this record."
-            )
-            errored_holdings_count += 1
-
-        else:
-            # convert to Pymarc to handle fields and subfields
-            pymarc_record = get_pymarc_record_from_bib(alma_holding)
-            pymarc_fields = pymarc_record.get_fields(marc_field_number)
-            if not pymarc_fields:
-                logging.info(
-                    f"No {marc_field_number} found for MMS ID {mms_id}, Holding ID {holding_id}"
-                )
-                skipped_holdings_count += 1
-            else:
-                for pymarc_field in pymarc_fields:
-                    # if this is the 966 field, check if it needs to be removed
-                    # based on bookplates_to_leave
-                    if marc_field_number == "966":
-                        if needs_966_removed(pymarc_field, bookplates_to_leave):
-                            pymarc_record.remove_field(pymarc_field)
-                            logging.info(
-                                f"Removing 966 bookplate from MMS ID {mms_id}, "
-                                f"Holding ID {holding_id}"
-                            )
-                        else:
-                            logging.info(
-                                f"Not removing 966 bookplate from MMS ID {mms_id}, "
-                                f"Holding ID {holding_id}",
-                            )
-                    # if this is the 856 field, check if it needs to be removed
-                    # based on the presence of "Bookplate"
-                    elif marc_field_number == "856":
-                        if needs_856_removed(pymarc_field):
-                            pymarc_record.remove_field(pymarc_field)
-                            logging.info(
-                                f"Removing 856 bookplate from MMS ID {mms_id}, "
-                                f"Holding ID {holding_id}"
-                            )
-                        else:
-                            logging.info(
-                                f"Not removing 856 bookplate from MMS ID {mms_id}, "
-                                f"Holding ID {holding_id}",
-                            )
-                # convert back to Alma Holding and send update
-                new_alma_holding = prepare_bib_for_update(alma_holding, pymarc_record)
-                client.update_holding(mms_id, holding_id, new_alma_holding)
-                updated_holdings_count += 1
-    logging.info(f"{marc_field_number} Bookplates Updated")
-    logging.info(f"Total Holdings Updated: {updated_holdings_count}")
-    logging.info(f"Total Holdings Skipped: {skipped_holdings_count}")
-    logging.info(f"Total Holdings Errored: {errored_holdings_count}")
-
-
-def needs_966_removed(field_966: Field, bookplates_to_leave: list) -> bool:
-    # only remove 966s that don't contain any of the SPACs in bookplates_to_leave in $a
-    subfields = field_966.get_subfields("a")
-    for term in bookplates_to_leave:
-        for subfield in subfields:
-            if term in subfield:
-                logging.info(f"Found {term} in 966 field")
-                return False
-    return True
-
-
-def needs_856_removed(field_856: Field) -> bool:
-    # only remove 856s that contain "Bookplate" in $3
-    subfields = field_856.get_subfields("3")
-    for subfield in subfields:
-        if "Bookplate" in subfield:
-            return True
-    return False
+    remove_bookplates(report_data, client, bookplates_to_leave_966)
 
 
 if __name__ == "__main__":
