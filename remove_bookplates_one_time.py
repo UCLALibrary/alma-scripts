@@ -95,12 +95,12 @@ def remove_bookplates(
                         pymarc_record.remove_field(field_856)
                         logging.info(
                             f"Removing 856 bookplate from MMS ID {mms_id}, "
-                            f"Holding ID {holding_id} ($a: {field_856.get_subfields('a')})"
+                            f"Holding ID {holding_id} ($z: {field_856.get_subfields('z')})"
                         )
                     else:
                         logging.info(
                             f"Not removing 856 bookplate from MMS ID {mms_id}, "
-                            f"Holding ID {holding_id} ($a: {field_856.get_subfields('a')})",
+                            f"Holding ID {holding_id} ($z: {field_856.get_subfields('z')})",
                         )
 
                 # check if any changes were made
