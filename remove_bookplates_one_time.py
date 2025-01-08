@@ -12,6 +12,9 @@ from datetime import datetime
 from retry.api import retry_call
 import json
 
+# for error handling
+from requests.exceptions import ConnectTimeout
+
 
 def get_bookplates_report(analytics_api_key: str) -> list:
     # analytics only available in prod environment
@@ -50,7 +53,13 @@ def remove_bookplates(
     client: AlmaAPIClient,
     bookplates_to_leave: list,
     start_index: int = 0,
+    limit: int = None,
 ):
+    # slice the report data to specified start index and limit
+    report_data = report_data[start_index:]
+    if limit:
+        report_data = report_data[:limit]
+
     logging.info(f"Processing {len(report_data)} bookplates")
     errored_holdings_count = 0
     updated_holdings_count = 0
@@ -68,7 +77,7 @@ def remove_bookplates(
                 delay=20,
                 backoff=2,
             )
-        except Exception as e:
+        except ConnectTimeout as e:
             logging.error(
                 f"Error finding MMS ID {mms_id}, Holding ID {holding_id}: {e}"
             )
@@ -146,7 +155,7 @@ def remove_bookplates(
                             backoff=2,
                         )
                         client.update_holding(mms_id, holding_id, new_alma_holding)
-                    except Exception as e:
+                    except ConnectTimeout as e:
                         logging.error(
                             f"Error updating MMS ID {mms_id}, Holding ID {holding_id}: {e}"
                         )
@@ -225,16 +234,12 @@ def main():
     if args.local_report_data_path:
         logging.info(f"Using local report data from {args.local_report_data_path}")
         with open(args.local_report_data_path, "r") as f:
-            report_data = json.load(f)[args.start_index :]
+            report_data = json.load(f)
 
     else:
         logging.info("Getting bookplate report data")
         report_data = get_bookplates_report(analytics_api_key)
-        report_data = report_data[args.start_index :]
-
-    # if a limit is specified, only process that many records
-    if args.limit:
-        report_data = report_data[: args.limit]
+        report_data = report_data
 
     client = AlmaAPIClient(alma_api_key)
 
@@ -290,7 +295,9 @@ def main():
         "WIF",
     ]
 
-    remove_bookplates(report_data, client, bookplates_to_leave_966, args.start_index)
+    remove_bookplates(
+        report_data, client, bookplates_to_leave_966, args.start_index, args.limit
+    )
 
 
 if __name__ == "__main__":
