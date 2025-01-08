@@ -239,7 +239,6 @@ def main():
     else:
         logging.info("Getting bookplate report data")
         report_data = get_bookplates_report(analytics_api_key)
-        report_data = report_data
 
     client = AlmaAPIClient(alma_api_key)
 
