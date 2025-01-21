@@ -74,7 +74,7 @@ class AlmaAnalyticsClient:
         """
         self.rows_per_fetch = rows_per_fetch
 
-    def get_report(self) -> dict:
+    def get_report(self) -> list[dict]:
         """Run Analytics report and return data."""
         if self.report_path is None:
             raise ValueError("Path to report must be set")
@@ -87,11 +87,8 @@ class AlmaAnalyticsClient:
             "filter": self.filter,
             "path": self.report_path,
         }
-        # TODO: Use Python 3.9+ merge syntax, when server is upgraded...
-        # params = constant_params | initial_params
         # First run: use constant + initial parameters merged
-        # Python < 3.9 merge
-        params = {**constant_params, **initial_params}
+        params = constant_params | initial_params
         report = self.alma_client.get_analytics_report(params)
         # Get data in usable format
         report_data = self._get_report_data(report)
@@ -107,9 +104,7 @@ class AlmaAnalyticsClient:
 
         while report_data["is_finished"] == "false":
             # After first run: use constant = subsequent parameters merged
-            # TODO: Use Python 3.9+ merge syntax, when server is upgraded...
-            # params = constant_params | subsequent_params
-            params = {**constant_params, **subsequent_params}
+            params = constant_params | subsequent_params
             report = self.alma_client.get_analytics_report(params)
             report_data = self._get_report_data(report)
             all_rows.extend(self._get_rows(report_data))
@@ -176,7 +171,7 @@ class AlmaAnalyticsClient:
         """Strip out formatting characters which make API unhappy."""
         return filter_xml.replace("\n", "").replace("\t", "")
 
-    def _get_rows(self, report_data: dict) -> dict:
+    def _get_rows(self, report_data: dict) -> list:
         """Convert single-row bare dict to a list containing that dict, if needed."""
         # This is a list of dictionaries if > 1 row...
         # but just a dictionary if only 1 row.
