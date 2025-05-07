@@ -32,7 +32,7 @@ def get_invoice_job_id(profile_id):
     # jobs is a dictionary, with 'job' list of dictionaries and 'total_record_count' (int)
     job_id = None
     for job in jobs["job"]:
-        if job["description"] == "Exports invoices to ERP system":
+        if job["description"] == "Exports invoices to ERP system (PA)":
             job_id = job["id"]
     if job_id is not None:
         print(f"job_id: {job_id}")
