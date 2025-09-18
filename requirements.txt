@@ -1,0 +1,6 @@
+# UCLA's local Alma API package
+# This includes pymarc, requests, and xmltodict as dependencies.
+git+https://github.com/UCLALibrary/alma-api-client
+
+# For retrying API calls
+retry==0.9.2

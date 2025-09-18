@@ -5,14 +5,23 @@ __pycache__
 *.csv
 *.dict
 *.json
+*.log
 *.lst
 *.mrc
 *.out
+*.pub
 *.tsv
 *.txt
+*.xlsx
 *.xml
 *.zip
 LIBRY-APINTRFC.*
+
+# Allow requirements.txt, for pip installation
+!requirements.txt
+
+# Allow .devcontainer configuration
+!.devcontainer/*
 
 # API keys and other secrets
 alma_api_keys.py
