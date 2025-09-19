@@ -3,8 +3,6 @@ import logging
 from alma_api_keys import API_KEYS
 from alma_api_client import (
     AlmaAPIClient,
-    get_pymarc_record_from_bib,
-    prepare_bib_for_update,
     AlmaAnalyticsClient,
 )
 from pymarc import Field
@@ -17,6 +15,11 @@ from requests.exceptions import ConnectTimeout
 
 
 def get_bookplates_report(analytics_api_key: str) -> list:
+    """Get the bookplates report from Alma Analytics.
+
+    :param analytics_api_key: Alma Analytics API key
+    :return: Bookplates report data
+    """
     # analytics only available in prod environment
     aac = AlmaAnalyticsClient(analytics_api_key)
     report_path = (
@@ -29,6 +32,12 @@ def get_bookplates_report(analytics_api_key: str) -> list:
 
 
 def needs_966_removed(field_966: Field, bookplates_to_leave: list) -> bool:
+    """Determine if a 966 field needs to be removed.
+
+    :param field_966: 966 field to test
+    :param bookplates_to_leave: List of bookplates to leave
+    :return: True if the 966 field needs to be removed, False otherwise
+    """
     # only remove 966s that don't contain any of the SPACs in bookplates_to_leave in $a
     subfields = field_966.get_subfields("a")
     for term in bookplates_to_leave:
@@ -40,6 +49,11 @@ def needs_966_removed(field_966: Field, bookplates_to_leave: list) -> bool:
 
 
 def needs_856_removed(field_856: Field) -> bool:
+    """Determine if a 856 field needs to be removed.
+
+    :param field_856: 856 field to test
+    :return: True if the 856 field needs to be removed, False otherwise
+    """
     # only remove 856s that contain "Bookplate" in $3
     subfields = field_856.get_subfields("3")
     for subfield in subfields:
@@ -55,6 +69,14 @@ def remove_bookplates(
     start_index: int = 0,
     limit: int = None,
 ):
+    """Remove bookplates from Alma holdings records.
+
+    :param report_data: Bookplate report data
+    :param client: Alma API client
+    :param bookplates_to_leave: List of bookplates to leave
+    :param start_index: Start index for the report data
+    :param limit: Limit the number of records to process
+    """
     # slice the report data to specified start index and limit
     report_data = report_data[start_index:]
     if limit:
@@ -184,6 +206,7 @@ def remove_bookplates(
 
 
 def main():
+    """Entry point for the script."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "environment",
