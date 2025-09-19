@@ -1,0 +1,8 @@
+services:
+  dev:
+    build: .
+    # tty: true
+    volumes: 
+      - .:/home/app_user/project
+    # Keep the container running until stopped via docker compose.
+    command: "sleep infinity"

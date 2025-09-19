@@ -1,0 +1,15 @@
+# Data files, in any directory, unless otherwise excepted.
+# These will still be mounted via docker compose, just not built into the image.
+**/*.csv
+**/*.json
+**/*.mrc
+**/*.tsv
+**/*.txt
+**/*.xlsx
+**/*.xls
+**/*.xml
+**/*.zip
+
+# Allow requirements.txt, for pip installation
+!requirements.txt
+
