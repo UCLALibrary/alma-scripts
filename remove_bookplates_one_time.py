@@ -1,6 +1,5 @@
 import argparse
 import logging
-from alma_api_keys import API_KEYS
 from alma_api_client import (
     AlmaAPIClient,
     AlmaAnalyticsClient,
@@ -8,10 +7,89 @@ from alma_api_client import (
 from pymarc import Field
 from datetime import datetime
 from retry.api import retry_call
+from pathlib import Path
 import json
+import tomllib
 
 # for error handling
 from requests.exceptions import ConnectTimeout
+
+
+def _get_arguments() -> argparse.Namespace:
+    """Parse command line arguments.
+
+    :return: Parsed arguments for program as a Namespace object."""
+    parser = argparse.ArgumentParser(
+        description="Remove bookplates from Alma holdings records."
+    )
+    parser.add_argument(
+        "production",
+        action="store_true",
+        default=False,
+        help="Run script using production API keys",
+    )
+    parser.add_argument(
+        "config_file",
+        default="config_secret.toml",
+        help="Path to the configuration file with API keys",
+    )
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Set the logging level",
+    )
+    parser.add_argument(
+        "--start-index",
+        type=int,
+        default=0,
+        help="Start index for the bookplates report",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Limit the number of records to process",
+    )
+    parser.add_argument(
+        "--local-report-data-path",
+        type=str,
+        default=None,
+        help="Path to local report data file, to use instead of fetching from analytics",
+    )
+    return parser.parse_args()
+
+
+def _get_config(config_file_name: str) -> dict:
+    """Returns configuration for this program, loaded from TOML file.
+
+    :param config_file_name: Path to the configuration file.
+    :return: Configuration dictionary."""
+
+    with open(config_file_name, "rb") as f:
+        config = tomllib.load(f)
+    return config
+
+
+def _configure_logging(log_level: str):
+    """Returns a logger for the current application.
+    A unique log filename is created using the current time, and log messages
+    will use the name in the 'logger' field.
+
+    :param log_level: Log level to use
+    """
+
+    name = Path(__file__).stem
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    logging_file = Path("logs", f"{name}_{timestamp}.log")  # Log to `logs/` dir
+    logging_file.parent.mkdir(parents=True, exist_ok=True)  # Make `logs/` dir, if none
+    logging.basicConfig(
+        filename=logging_file,
+        level=log_level,
+        format="%(asctime)s %(levelname)s: %(message)s",
+    )
+    # always suppress urllib3 logs with lower level than WARNING
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 def get_bookplates_report(analytics_api_key: str) -> list:
@@ -164,7 +242,7 @@ def remove_bookplates(
                     skipped_holdings_count += 1
                 else:
                     # convert back to Alma Holding and send update
-                    new_alma_holding = prepare_bib_for_update(
+                    new_alma_holding = client.create_holding_record(
                         alma_holding, pymarc_record
                     )
                     # deal with possible ConnectTimeout error
@@ -207,52 +285,17 @@ def remove_bookplates(
 
 def main():
     """Entry point for the script."""
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "environment",
-        choices=["sandbox", "production"],
-        help="Alma environment (sandbox or production)",
-    )
-    parser.add_argument(
-        "--log-level",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default="INFO",
-        help="Set the logging level",
-    )
-    parser.add_argument(
-        "--start-index",
-        type=int,
-        default=0,
-        help="Start index for the bookplates report",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Limit the number of records to process",
-    )
-    parser.add_argument(
-        "--local-report-data-path",
-        type=str,
-        default=None,
-        help="Path to local report data file, to use instead of fetching from analytics",
-    )
-    args = parser.parse_args()
+    args = _get_arguments()
+    config = _get_config(args.config_file)
+    _configure_logging(args.log_level)
 
-    logging_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_filename = f"remove_bookplates_{logging_datetime}"
-    logging.basicConfig(filename=f"{base_filename}.log", level=args.log_level)
-    # always suppress urllib3 logs with lower level than WARNING
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-
-    if args.environment == "sandbox":
-        alma_api_key = API_KEYS["SANDBOX"]
+    if args.environment == "production":
+        analytics_api_key = config["alma_api_keys"]["DIIT_ANALYTICS"]
+        alma_api_key = config["alma_api_keys"]["DIIT_SCRIPTS"]
+    else:  # default to sandbox
+        alma_api_key = config["alma_api_keys"]["SANDBOX"]
         # analytics only available in prod environment
-        analytics_api_key = API_KEYS["DIIT_ANALYTICS"]
-
-    elif args.environment == "production":
-        analytics_api_key = API_KEYS["DIIT_ANALYTICS"]
-        alma_api_key = API_KEYS["DIIT_SCRIPTS"]
+        analytics_api_key = config["alma_api_keys"]["DIIT_ANALYTICS"]
 
     if args.local_report_data_path:
         logging.info(f"Using local report data from {args.local_report_data_path}")
