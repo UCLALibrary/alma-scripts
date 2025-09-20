@@ -9,6 +9,7 @@ from datetime import datetime
 from retry.api import retry_call
 from pathlib import Path
 import json
+import csv
 import tomllib
 
 # for error handling
@@ -23,14 +24,15 @@ def _get_arguments() -> argparse.Namespace:
         description="Remove bookplates from Alma holdings records."
     )
     parser.add_argument(
-        "production",
+        "--production",
         action="store_true",
         default=False,
         help="Run script using production API keys",
     )
     parser.add_argument(
-        "config_file",
-        default="config_secret.toml",
+        "--config_file",
+        type=str,
+        default="secret_config.toml",
         help="Path to the configuration file with API keys",
     )
     parser.add_argument(
@@ -52,10 +54,10 @@ def _get_arguments() -> argparse.Namespace:
         help="Limit the number of records to process",
     )
     parser.add_argument(
-        "--local-report-data-path",
+        "--report_file",
         type=str,
         default=None,
-        help="Path to local report data file, to use instead of fetching from analytics",
+        help="Path to local report data file, to use instead of fetching from Alma Analytics",
     )
     return parser.parse_args()
 
@@ -90,6 +92,21 @@ def _configure_logging(log_level: str):
     )
     # always suppress urllib3 logs with lower level than WARNING
     logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+
+def _load_report_data_from_file(file_path: str) -> list:
+    """Load the report data from a file.
+
+    :param file_path: Path to the file
+    :return: Report data
+    """
+    with open(file_path, "r", encoding="utf-8") as f:
+        if file_path.endswith(".json"):
+            return json.load(f)
+        elif file_path.endswith(".csv"):
+            return list(csv.DictReader(f))
+        else:
+            raise ValueError(f"Report must be either JSON or CSV: {file_path}")
 
 
 def get_bookplates_report(analytics_api_key: str) -> list:
@@ -289,7 +306,7 @@ def main():
     config = _get_config(args.config_file)
     _configure_logging(args.log_level)
 
-    if args.environment == "production":
+    if args.production:
         analytics_api_key = config["alma_api_keys"]["DIIT_ANALYTICS"]
         alma_api_key = config["alma_api_keys"]["DIIT_SCRIPTS"]
     else:  # default to sandbox
@@ -297,13 +314,11 @@ def main():
         # analytics only available in prod environment
         analytics_api_key = config["alma_api_keys"]["DIIT_ANALYTICS"]
 
-    if args.local_report_data_path:
-        logging.info(f"Using local report data from {args.local_report_data_path}")
-        with open(args.local_report_data_path, "r") as f:
-            report_data = json.load(f)
-
+    if args.report_file:
+        logging.info(f"Using local report data from {args.report_file}")
+        report_data = _load_report_data_from_file(args.report_file)
     else:
-        logging.info("Getting bookplate report data")
+        logging.info("Getting bookplate report data from Alma Analytics")
         report_data = get_bookplates_report(analytics_api_key)
 
     client = AlmaAPIClient(alma_api_key)
