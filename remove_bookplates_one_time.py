@@ -36,13 +36,13 @@ def _get_arguments() -> argparse.Namespace:
         help="Path to the configuration file with API keys",
     )
     parser.add_argument(
-        "--log-level",
+        "--log_level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="INFO",
         help="Set the logging level",
     )
     parser.add_argument(
-        "--start-index",
+        "--start_index",
         type=int,
         default=0,
         help="Start index for the bookplates report",
@@ -213,6 +213,7 @@ def remove_bookplates(
             continue
         alma_holding_xml = alma_holding_record.alma_xml
         # make sure we got a valid holding record
+        # TODO: use built-in error handling here, when it's added to the new Alma API client
         if (
             b"is not valid" in alma_holding_xml
             or b"INTERNAL_SERVER_ERROR" in alma_holding_xml
@@ -324,8 +325,10 @@ def main():
     _configure_logging(args.log_level)
 
     if args.production:
+        logging.info("Using production Alma API key")
         alma_api_key = config["alma_api_keys"]["DIIT_SCRIPTS"]
     else:  # default to sandbox
+        logging.info("Using sandbox Alma API key")
         alma_api_key = config["alma_api_keys"]["SANDBOX"]
 
     # analytics only available in prod environment
