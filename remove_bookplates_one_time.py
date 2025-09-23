@@ -94,6 +94,16 @@ def _configure_logging(log_level: str):
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
+def _write_to_file(data: list, file_path: str | Path):
+    """Write data to a file.
+
+    :param data: Data to write
+    :param file_path: Path to the file
+    """
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+
 def _load_report_data_from_file(file_path: str) -> list:
     """Load the report data from a file.
 
@@ -162,7 +172,7 @@ def remove_bookplates(
     client: AlmaAPIClient,
     bookplates_to_leave: list,
     start_index: int = 0,
-    limit: int = None,
+    limit: int = 0,
 ):
     """Remove bookplates from Alma holdings records.
 
@@ -174,7 +184,7 @@ def remove_bookplates(
     """
     # slice the report data to specified start index and limit
     report_data = report_data[start_index:]
-    if limit:
+    if limit > 0:
         report_data = report_data[:limit]
 
     logging.info(f"Processing {len(report_data)} bookplates")
@@ -188,7 +198,7 @@ def remove_bookplates(
         holding_id = item["Holding Id"]
         try:
             alma_holding_record = retry_call(
-                client.get_holding,
+                client.get_holding_record,
                 fargs=(mms_id, holding_id),
                 tries=3,
                 delay=20,
@@ -201,13 +211,13 @@ def remove_bookplates(
             errored_holdings_count += 1
             errored_holdings.append({"MMS Id": mms_id, "Holding Id": holding_id})
             continue
-        alma_holding = alma_holding_record.get("content")
-        # make sure we got a valid bib
+        alma_holding_xml = alma_holding_record.alma_xml
+        # make sure we got a valid holding record
         if (
-            b"is not valid" in alma_holding
-            or b"INTERNAL_SERVER_ERROR" in alma_holding
-            or b"Search failed" in alma_holding
-            or alma_holding is None
+            b"is not valid" in alma_holding_xml
+            or b"INTERNAL_SERVER_ERROR" in alma_holding_xml
+            or b"Search failed" in alma_holding_xml
+            or alma_holding_xml is None
         ):
             logging.error(
                 f"Error finding MMS ID {mms_id}, Holding ID {holding_id}. Skipping this record."
@@ -217,14 +227,23 @@ def remove_bookplates(
 
         else:
             # convert to Pymarc to handle fields and subfields
-            pymarc_record = get_pymarc_record_from_bib(alma_holding)
+            pymarc_record = alma_holding_record.marc_record
+            if not pymarc_record:
+                logging.error(
+                    f"Error converting MMS ID {mms_id}, Holding ID {holding_id} to Pymarc."
+                )
+                errored_holdings_count += 1
+                errored_holdings.append({"MMS Id": mms_id, "Holding Id": holding_id})
+                continue
+            # get initial bytes for comparison later
+            initial_bytes = pymarc_record.as_marc()
+            # examine fields to see if any need to be removed
             pymarc_966_fields = pymarc_record.get_fields("966")
             pymarc_856_fields = pymarc_record.get_fields("856")
             if not pymarc_966_fields and not pymarc_856_fields:
                 logging.info(
                     f"No 966 or 856 found for MMS ID {mms_id}, Holding ID {holding_id}"
                 )
-                skipped_holdings_count += 1
             else:
                 for field_966 in pymarc_966_fields:
                     if needs_966_removed(field_966, bookplates_to_leave):
@@ -251,53 +270,51 @@ def remove_bookplates(
                             f"Holding ID {holding_id} ($z: {field_856.get_subfields('z')})",
                         )
 
-                # check if any changes were made
-                if pymarc_record == get_pymarc_record_from_bib(alma_holding):
-                    logging.info(
-                        f"No changes made to MMS ID {mms_id}, Holding ID {holding_id}"
+            # check if any changes were made,
+            # using bytes comparison to avoid object identity issues
+            updated_bytes = pymarc_record.as_marc()
+            if updated_bytes == initial_bytes:
+                logging.info(
+                    f"No changes made to MMS ID {mms_id}, Holding ID {holding_id}"
+                )
+                skipped_holdings_count += 1
+            else:
+                # add pymarc updates to holding record
+                alma_holding_record.marc_record = pymarc_record
+                # update holding record
+                try:
+                    retry_call(
+                        client.update_holding_record,
+                        fargs=(mms_id, alma_holding_record),
+                        tries=3,
+                        delay=20,
+                        backoff=2,
                     )
-                    skipped_holdings_count += 1
+                # deal with possible ConnectTimeout error
+                except ConnectTimeout as e:
+                    logging.error(
+                        f"Error updating MMS ID {mms_id}, Holding ID {holding_id}: {e}"
+                    )
+                    errored_holdings_count += 1
+                    errored_holdings.append(
+                        {"MMS Id": mms_id, "Holding Id": holding_id}
+                    )
                 else:
-                    # convert back to Alma Holding and send update
-                    new_alma_holding = client.create_holding_record(
-                        alma_holding, pymarc_record
-                    )
-                    # deal with possible ConnectTimeout error
-                    try:
-                        retry_call(
-                            client.update_holding,
-                            fargs=(mms_id, holding_id, new_alma_holding),
-                            tries=3,
-                            delay=20,
-                            backoff=2,
-                        )
-                        client.update_holding(mms_id, holding_id, new_alma_holding)
-                    except ConnectTimeout as e:
-                        logging.error(
-                            f"Error updating MMS ID {mms_id}, Holding ID {holding_id}: {e}"
-                        )
-                        errored_holdings_count += 1
-                        errored_holdings.append(
-                            {"MMS Id": mms_id, "Holding Id": holding_id}
-                        )
-                    else:
-
-                        logging.info(
-                            f"Updated MMS ID {mms_id}, Holding ID {holding_id}"
-                        )
-                        updated_holdings_count += 1
+                    logging.info(f"Updated MMS ID {mms_id}, Holding ID {holding_id}")
+                    updated_holdings_count += 1
     logging.info("Finished Bookplate Updates")
     logging.info(f"Total Holdings Updated: {updated_holdings_count}")
     logging.info(f"Total Holdings Skipped: {skipped_holdings_count}")
     logging.info(f"Total Holdings Errored: {errored_holdings_count}")
     if errored_holdings:
-        logging.info(f"Errored Holdings: {errored_holdings}")
         # write errored holdings to file
         output_filename = (
             f"errored_holdings_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         )
-        with open(output_filename, "w") as f:
-            json.dump(errored_holdings, f)
+        output_path = Path("logs", output_filename)  # write to logs/ dir
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        logging.info(f"Errored holdings written to `{output_path}`")
+        _write_to_file(errored_holdings, output_path)
 
 
 def main():
@@ -307,12 +324,12 @@ def main():
     _configure_logging(args.log_level)
 
     if args.production:
-        analytics_api_key = config["alma_api_keys"]["DIIT_ANALYTICS"]
         alma_api_key = config["alma_api_keys"]["DIIT_SCRIPTS"]
     else:  # default to sandbox
         alma_api_key = config["alma_api_keys"]["SANDBOX"]
-        # analytics only available in prod environment
-        analytics_api_key = config["alma_api_keys"]["DIIT_ANALYTICS"]
+
+    # analytics only available in prod environment
+    analytics_api_key = config["alma_api_keys"]["DIIT_ANALYTICS"]
 
     if args.report_file:
         logging.info(f"Using local report data from {args.report_file}")
