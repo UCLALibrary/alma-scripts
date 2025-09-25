@@ -1,12 +1,76 @@
 import csv
 import argparse
 import logging
+from pathlib import Path
+from datetime import datetime
 from alma_api_keys import API_KEYS
 from alma_api_client import AlmaAPIClient
 from alma_analytics_client import AlmaAnalyticsClient
 from alma_marc import get_pymarc_record_from_bib, prepare_bib_for_update
 from pymarc import Field
 
+def _get_arguments() -> argparse.Namespace:
+    """Parse command-line arguments.
+    
+    :return Parsed arguments for program as a Namespace object.
+    """
+    parser = argparse.ArgumentParser(description="Update bookplates in Alma.")
+    parser.add_argument(
+        "--spac_mappings_file",
+        type=str,
+        help="Path to the SPAC mappings .csv file"
+    )
+    parser.add_argument(
+        "--production",
+        action="store_true",
+        help="Use production Alma API key. Default is sandbox.",
+    )
+    parser.add_argument(
+        "--config_file",
+        type=str,
+        default="secret_config.toml",
+        help="Path to config file with API keys"
+    )
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Set the logging level",
+    )
+    parser.add_argument(
+        "--start-index", type=int, help="Start processing report data at this index"
+    )
+    return parser.parse_args()
+
+def _get_config(config_file_name: str) -> dict:
+    """Returns configuration for this program, loaded from TOML file.
+
+    :param config_file_name: Path to the configuration file.
+    :return: Configuration dictionary.
+    """
+
+    with open(config_file_name, "rb") as f:
+        config = tomllib.load(f)
+    return config
+
+def _configure_logging(log_level: str):
+    """Returns a logger for the current application.
+    A unique log filename is created using the current time, and log messages
+    will use the name in the 'logger' field.
+
+    :param log_level: Log level to use
+    """
+    name = Path(__file__).stem
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    logging_file = Path("logs", f"{name}_{timestamp}.log")  # Log to `logs/` dir
+    logging_file.parent.mkdir(parents=True, exist_ok=True)  # Make `logs/` dir, if none
+    logging.basicConfig(
+        filename=logging_file,
+        level=log_level,
+        format="%(asctime)s %(levelname)s: %(message)s",
+    )
+    # always suppress urllib3 logs with lower level than WARNING
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 def get_mms_report(analytics_api_key: str) -> list:
     """Get the report of MMS IDs and current 966 contents from Alma Analytics."""
@@ -74,28 +138,10 @@ def update_existing_966(field_966: Field, spac_name: str, spac_url: str) -> None
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "spac_mappings_file", help="Path to the SPAC mappings .csv file"
-    )
-    parser.add_argument(
-        "environment",
-        help="Alma environment (sandbox or production), or 'test' for a small test set.",
-    )
-    parser.add_argument(
-        "--log-level",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default="INFO",
-        help="Set the logging level",
-    )
-    parser.add_argument(
-        "--start-index", type=int, help="Start processing report data at this index"
-    )
-    args = parser.parse_args()
-
-    logging.basicConfig(filename="update_bookplates_one_time.log", level=args.log_level)
-    # always suppress urllib3 logs with lower level than WARNING
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    """Entry point for the script."""
+    args = _get_arguments()
+    config = _get_config(args.config_file)
+    _configure_logging(args.log_level)
 
     if args.environment == "test":
         # test data for sandbox environment
@@ -105,20 +151,20 @@ def main():
         ]
         alma_api_key = API_KEYS["SANDBOX"]
 
-    elif args.environment == "sandbox":
-        # use production analytics key for sandbox environment, since sandbox doesn't have analytics
-        analytics_api_key = API_KEYS["DIIT_ANALYTICS"]
-        alma_api_key = API_KEYS["SANDBOX"]
-        report = get_mms_report(analytics_api_key)
+    if args.production:
+        logging.info("Using production Alma API key")
+        alma_api_key = config["alma_api_keys"]["DIIT_SCRIPTS"]
+    else:  # default to sandbox
+        logging.info("Using sandbox Alma API key")
+        alma_api_key = config["alma_api_keys"]["SANDBOX"]
 
-    elif args.environment == "production":
-        analytics_api_key = API_KEYS["DIIT_ANALYTICS"]
-        alma_api_key = API_KEYS["DIIT_SCRIPTS"]
-        report = get_mms_report(analytics_api_key)
+    # analytics only available in prod environment
+    analytics_api_key = config["alma_api_keys"]["DIIT_ANALYTICS"]
+    report = get_mms_report(analytics_api_key)
 
     # if a start index is provided, slice the report to start at that index
     if args.start_index:
-        report = report[args.start_index :]
+        report = report[args.start_index:]
 
     logging.info(f"Beginning processing {len(report)} bib e-bookplates")
 
