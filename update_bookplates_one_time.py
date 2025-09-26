@@ -1,24 +1,21 @@
 import csv
 import argparse
 import logging
+import tomllib
 from pathlib import Path
 from datetime import datetime
-from alma_api_keys import API_KEYS
-from alma_api_client import AlmaAPIClient
-from alma_analytics_client import AlmaAnalyticsClient
-from alma_marc import get_pymarc_record_from_bib, prepare_bib_for_update
+from alma_api_client import AlmaAPIClient, AlmaAnalyticsClient
 from pymarc import Field
+
 
 def _get_arguments() -> argparse.Namespace:
     """Parse command-line arguments.
-    
-    :return Parsed arguments for program as a Namespace object.
+
+    :return: Parsed arguments for program as a Namespace object.
     """
     parser = argparse.ArgumentParser(description="Update bookplates in Alma.")
     parser.add_argument(
-        "--spac_mappings_file",
-        type=str,
-        help="Path to the SPAC mappings .csv file"
+        "--spac_mappings_file", type=str, help="Path to the SPAC mappings .csv file"
     )
     parser.add_argument(
         "--production",
@@ -29,7 +26,7 @@ def _get_arguments() -> argparse.Namespace:
         "--config_file",
         type=str,
         default="secret_config.toml",
-        help="Path to config file with API keys"
+        help="Path to config file with API keys",
     )
     parser.add_argument(
         "--log-level",
@@ -42,6 +39,7 @@ def _get_arguments() -> argparse.Namespace:
     )
     return parser.parse_args()
 
+
 def _get_config(config_file_name: str) -> dict:
     """Returns configuration for this program, loaded from TOML file.
 
@@ -52,6 +50,7 @@ def _get_config(config_file_name: str) -> dict:
     with open(config_file_name, "rb") as f:
         config = tomllib.load(f)
     return config
+
 
 def _configure_logging(log_level: str):
     """Returns a logger for the current application.
@@ -71,6 +70,7 @@ def _configure_logging(log_level: str):
     )
     # always suppress urllib3 logs with lower level than WARNING
     logging.getLogger("urllib3").setLevel(logging.WARNING)
+
 
 def get_mms_report(analytics_api_key: str) -> list:
     """Get the report of MMS IDs and current 966 contents from Alma Analytics."""
@@ -137,19 +137,93 @@ def update_existing_966(field_966: Field, spac_name: str, spac_url: str) -> None
         field_966.add_subfield("c", spac_url)
 
 
+def update_bookplates(report: list, spac_mappings: list, client: AlmaAPIClient) -> None:
+    """Update bookplates in a list of bibs.
+
+    :param report: Alma Analytics report with MMS IDs to update.
+    :param spac_mappings: List of SPAC mappings.
+    :param client: Alma API client.
+    """
+    # initialize counters
+    total_bibs_updated = 0
+    total_bibs_skipped = 0
+    total_bibs_errored = 0
+
+    for report_index, item in enumerate(report):
+
+        mms_id = item["MMS Id"]
+        bib_was_updated = False
+
+        try:
+            # get bib from Alma
+            alma_bib = client.get_bib_record(mms_id)
+            # check for error in bib response, usually due to invalid MMS ID
+            # TODO: update this once error-checking is added to AlmaAPIClient
+            if b"errorsExist" in alma_bib.alma_xml:
+                logging.error(
+                    f"Got an error finding bib record for MMS ID {mms_id}. Skipping this record."
+                )
+                total_bibs_errored += 1
+                continue
+        except ValueError as e:
+            logging.error(f"Error finding MMS ID {mms_id}, index {report_index}: {e}")
+            total_bibs_errored += 1
+            continue
+        except Exception:
+            # if we get an Exception other than ValueError, halt the script.
+            # Report is sorted by MMS ID, so we can use this to resume later if needed.
+            logging.error(
+                f"Unexpected response for MMS ID {mms_id}, index {report_index}. Exiting."
+            )
+            exit()
+
+        # convert to Pymarc to handle fields and subfields
+        pymarc_record = alma_bib.marc_record
+        if not pymarc_record:
+            logging.error(
+                f"Error converting MMS ID {mms_id}, index {report_index} to Pymarc."
+            )
+            total_bibs_errored += 1
+            continue
+        for field_966 in pymarc_record.get_fields("966"):
+            if needs_bookplate_update(field_966, spac_mappings):
+                # get the SPAC name and URL from the mappings
+                spac_info = get_spac_info(spac_mappings, field_966)
+                spac_name = spac_info["spac_name"]
+                spac_url = spac_info["spac_url"]
+                update_existing_966(field_966, spac_name, spac_url)
+                logging.info(
+                    f"Updated bookplate. MMS ID: {mms_id}, SPAC Name: {spac_name}",
+                )
+                bib_was_updated = True
+
+        if bib_was_updated:
+            alma_bib.marc_record = pymarc_record
+            client.update_bib_record(mms_id, alma_bib)
+            total_bibs_updated += 1
+        else:
+            # this case shouldn't happen, since report is limited to records that need updating
+            # log it in case it does
+            total_bibs_skipped += 1
+            logging.info(f"Skipping MMS ID {mms_id}. No 966 updates needed.")
+
+        # every 1% of records, log progress
+        # Take 1%, round down, add 1 to avoid 0 when length < 100
+        progress_interval = (len(report) // 100) + 1
+        if report_index % progress_interval == 0:
+            logging.info(f"Processed {report_index} bibs. Last MMS ID: {mms_id}")
+
+    logging.info("Finished adding ebookplates.")
+    logging.info(f"{total_bibs_updated} bibs updated.")
+    logging.info(f"{total_bibs_skipped} bibs skipped with no 966 updates needed.")
+    logging.info(f"{total_bibs_errored} bibs skipped due to errors.")
+
+
 def main():
     """Entry point for the script."""
     args = _get_arguments()
     config = _get_config(args.config_file)
     _configure_logging(args.log_level)
-
-    if args.environment == "test":
-        # test data for sandbox environment
-        report = [
-            {"MMS Id": "9911656853606533"},
-            {"MMS Id": "9990572683606533"},
-        ]
-        alma_api_key = API_KEYS["SANDBOX"]
 
     if args.production:
         logging.info("Using production Alma API key")
@@ -164,77 +238,16 @@ def main():
 
     # if a start index is provided, slice the report to start at that index
     if args.start_index:
-        report = report[args.start_index:]
-
-    logging.info(f"Beginning processing {len(report)} bib e-bookplates")
+        report = report[args.start_index :]
+    # if a limit is provided, slice the report to that limit
+    if args.limit:
+        report = report[: args.limit]
 
     client = AlmaAPIClient(alma_api_key)
-
     spac_mappings = get_spac_mappings(args.spac_mappings_file)
 
-    # initialize counters
-    total_bibs_updated = 0
-    total_bibs_skipped = 0
-    total_bibs_errored = 0
-    report_index = 0
-
-    for item in report:
-
-        mms_id = item["MMS Id"]
-        bib_was_updated = False
-
-        # get bib from Alma
-        alma_bib = client.get_bib(mms_id).get("content")
-        # check for error in bib response, usually due to invalid MMS ID
-        if b"errorsExist" in alma_bib:
-            logging.error(
-                f"Got an error finding bib record for MMS ID {mms_id}. Skipping this record."
-            )
-            total_bibs_errored += 1
-            continue
-        # if we get a bad response, halt the script
-        # report is sorted by MMS ID, so we can use this to resume later if needed
-        if not alma_bib:
-            logging.error(
-                f"Unexpected response for MMS ID {mms_id}, index {report_index}. Exiting."
-            )
-            exit()
-
-        # convert to Pymarc to handle fields and subfields
-        pymarc_record = get_pymarc_record_from_bib(alma_bib)
-        for field_966 in pymarc_record.get_fields("966"):
-            if needs_bookplate_update(field_966, spac_mappings):
-                # get the SPAC name and URL from the mappings
-                spac_info = get_spac_info(spac_mappings, field_966)
-                spac_name = spac_info["spac_name"]
-                spac_url = spac_info["spac_url"]
-                update_existing_966(field_966, spac_name, spac_url)
-                logging.debug(
-                    f"Updated bookplate. MMS ID: {mms_id}, SPAC Name: {spac_name}",
-                )
-                bib_was_updated = True
-
-        if bib_was_updated:
-            new_alma_bib = prepare_bib_for_update(alma_bib, pymarc_record)
-            client.update_bib(mms_id, new_alma_bib)
-            total_bibs_updated += 1
-        else:
-            # this case shouldn't happen, since report is limited to records that need updating
-            # log it in case it does
-            total_bibs_skipped += 1
-            logging.info(f"Skipping MMS ID {mms_id}. No 966 updates needed.")
-
-        report_index += 1
-        # every 1% of records, log progress
-        # Take 1%, round down, add 1 to avoid 0 when length < 100
-        progress_interval = (len(report) // 100) + 1
-        if report_index % progress_interval == 0:
-            logging.info(f"Processed {report_index} bibs. Last MMS ID: {mms_id}")
-
-    logging.info("Finished adding ebookplates.")
-    logging.info(f"{total_bibs_updated} bibs updated.")
-    logging.info(f"{total_bibs_skipped} bibs skipped with no 966 updates needed.")
-    logging.info(f"{total_bibs_errored} bibs skipped due to errors.")
+    logging.info(f"Beginning processing {len(report)} bib e-bookplates")
+    update_bookplates(report, spac_mappings, client)
 
 
 if __name__ == "__main__":
