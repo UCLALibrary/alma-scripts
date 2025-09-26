@@ -73,7 +73,11 @@ def _configure_logging(log_level: str):
 
 
 def get_mms_report(analytics_api_key: str) -> list:
-    """Get the report of MMS IDs and current 966 contents from Alma Analytics."""
+    """Get the report of MMS IDs and current 966 contents from Alma Analytics.
+
+    :param analytics_api_key: Alma Analytics API key.
+    :return: Alma Analytics report with MMS IDs and current 966 contents.
+    """
     # analytics only available in prod environment
     aac = AlmaAnalyticsClient(analytics_api_key)
     report_path = (
@@ -86,7 +90,11 @@ def get_mms_report(analytics_api_key: str) -> list:
 
 
 def get_spac_mappings(input_file: str) -> list:
-    """Get SPAC mappings from a CSV file. Filter out any lines without a valid URL."""
+    """Get SPAC mappings from a CSV file. Filter out any lines without a valid URL.
+
+    :param input_file: Path to the SPAC mappings CSV file.
+    :return: List of SPAC mappings.
+    """
     spac_mappings = []
     with open(input_file, newline="", encoding="utf-8-sig") as csv_file:
         reader = csv.DictReader(csv_file)
@@ -109,7 +117,12 @@ def get_spac_mappings(input_file: str) -> list:
 
 
 def needs_bookplate_update(old_field: Field, spac_mappings: list) -> bool:
-    """Check if a 966 field matches a SPAC code. If so, assume it needs updating."""
+    """Check if a 966 field matches a SPAC code. If so, assume it needs updating.
+
+    :param old_field: The old 966 Pymarc Field to check.
+    :param spac_mappings: List of SPAC mappings.
+    :return: True if the 966 field needs updating, False otherwise.
+    """
     # check if the SPAC code in the 966 field is in the list of SPAC mappings
     for spac_mapping in spac_mappings:
         if spac_mapping["SPAC"] == old_field.get_subfields("a")[0]:
@@ -118,15 +131,25 @@ def needs_bookplate_update(old_field: Field, spac_mappings: list) -> bool:
 
 
 def get_spac_info(spac_mappings: list, field_966: Field) -> dict:
-    """Get the SPAC name and URL from the mappings to update a 966."""
+    """Get the SPAC name and URL from the mappings to update a 966.
+
+    :param spac_mappings: List of SPAC mappings.
+    :param field_966: The 966 Pymarc Field to update.
+    :return: Dictionary with SPAC name and URL.
+    """
     for spac_mapping in spac_mappings:
         if spac_mapping["SPAC"] == field_966.get_subfields("a")[0]:
             return {"spac_name": spac_mapping["NAME"], "spac_url": spac_mapping["URL"]}
     return {"spac_name": "", "spac_url": ""}
 
 
-def update_existing_966(field_966: Field, spac_name: str, spac_url: str) -> None:
-    """Update the URL and bookplate text in an existing 966 field."""
+def update_existing_966(field_966: Field, spac_name: str, spac_url: str):
+    """Update the URL and bookplate text in an existing 966 field.
+
+    :param field_966: The 966 Pymarc Field to update.
+    :param spac_name: The new SPAC name.
+    :param spac_url: The new SPAC URL.
+    """
     # update $b for bookplate text
     field_966.delete_subfield("b")
     field_966.add_subfield("b", spac_name)
@@ -137,7 +160,7 @@ def update_existing_966(field_966: Field, spac_name: str, spac_url: str) -> None
         field_966.add_subfield("c", spac_url)
 
 
-def update_bookplates(report: list, spac_mappings: list, client: AlmaAPIClient) -> None:
+def update_bookplates(report: list, spac_mappings: list, client: AlmaAPIClient):
     """Update bookplates in a list of bibs.
 
     :param report: Alma Analytics report with MMS IDs to update.
