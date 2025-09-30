@@ -1,9 +1,6 @@
 import argparse
 import logging
-from alma_api_client import (
-    AlmaAPIClient,
-    AlmaAnalyticsClient,
-)
+from alma_api_client import AlmaAPIClient, AlmaAnalyticsClient, APIError
 from pymarc import Field
 from datetime import datetime
 from retry.api import retry_call
@@ -196,6 +193,7 @@ def remove_bookplates(
         logging.info(f"Current report index: {index + start_index}")
         mms_id = item["MMS Id"]
         holding_id = item["Holding Id"]
+
         try:
             alma_holding_record = retry_call(
                 client.get_holding_record,
@@ -206,103 +204,103 @@ def remove_bookplates(
             )
         except ConnectTimeout as e:
             logging.error(
-                f"Error finding MMS ID {mms_id}, Holding ID {holding_id}: {e}"
+                f"Connection timed out while finding MMS ID {mms_id}, Holding ID {holding_id}: {e}"
             )
             errored_holdings_count += 1
             errored_holdings.append({"MMS Id": mms_id, "Holding Id": holding_id})
             continue
-        alma_holding_xml = alma_holding_record.alma_xml
-        # make sure we got a valid holding record
-        # TODO: use built-in error handling here, when it's added to the new Alma API client
-        if (
-            b"is not valid" in alma_holding_xml
-            or b"INTERNAL_SERVER_ERROR" in alma_holding_xml
-            or b"Search failed" in alma_holding_xml
-            or alma_holding_xml is None
-        ):
+        except APIError as e:
             logging.error(
-                f"Error finding MMS ID {mms_id}, Holding ID {holding_id}. Skipping this record."
+                f"AlmaAPIClient returned an error "
+                f"while finding MMS ID {mms_id}, Holding ID {holding_id}: {e}"
             )
             errored_holdings_count += 1
             errored_holdings.append({"MMS Id": mms_id, "Holding Id": holding_id})
+            continue
 
+        # convert to Pymarc to handle fields and subfields
+        pymarc_record = alma_holding_record.marc_record
+        if not pymarc_record:
+            logging.error(
+                f"Error converting MMS ID {mms_id}, Holding ID {holding_id} to Pymarc."
+            )
+            errored_holdings_count += 1
+            errored_holdings.append({"MMS Id": mms_id, "Holding Id": holding_id})
+            continue
+        # get initial bytes for comparison later
+        initial_bytes = pymarc_record.as_marc()
+        # examine fields to see if any need to be removed
+        pymarc_966_fields = pymarc_record.get_fields("966")
+        pymarc_856_fields = pymarc_record.get_fields("856")
+        if not pymarc_966_fields and not pymarc_856_fields:
+            logging.info(
+                f"No 966 or 856 found for MMS ID {mms_id}, Holding ID {holding_id}"
+            )
         else:
-            # convert to Pymarc to handle fields and subfields
-            pymarc_record = alma_holding_record.marc_record
-            if not pymarc_record:
+            for field_966 in pymarc_966_fields:
+                if needs_966_removed(field_966, bookplates_to_leave):
+                    pymarc_record.remove_field(field_966)
+                    logging.info(
+                        f"Removing 966 bookplate from MMS ID {mms_id}, "
+                        f"Holding ID {holding_id} ($a: {field_966.get_subfields('a')})"
+                    )
+                else:
+                    logging.info(
+                        f"Not removing 966 bookplate from MMS ID {mms_id}, "
+                        f"Holding ID {holding_id} ($a: {field_966.get_subfields('a')})",
+                    )
+            for field_856 in pymarc_856_fields:
+                if needs_856_removed(field_856):
+                    pymarc_record.remove_field(field_856)
+                    logging.info(
+                        f"Removing 856 bookplate from MMS ID {mms_id}, "
+                        f"Holding ID {holding_id} ($z: {field_856.get_subfields('z')})"
+                    )
+                else:
+                    logging.info(
+                        f"Not removing 856 bookplate from MMS ID {mms_id}, "
+                        f"Holding ID {holding_id} ($z: {field_856.get_subfields('z')})",
+                    )
+
+        # check if any changes were made,
+        # using bytes comparison to avoid object identity issues
+        updated_bytes = pymarc_record.as_marc()
+        if updated_bytes == initial_bytes:
+            logging.info(f"No changes made to MMS ID {mms_id}, Holding ID {holding_id}")
+            skipped_holdings_count += 1
+        else:
+            # add pymarc updates to holding record
+            alma_holding_record.marc_record = pymarc_record
+            # update holding record
+            try:
+                retry_call(
+                    client.update_holding_record,
+                    fargs=(mms_id, alma_holding_record),
+                    tries=3,
+                    delay=20,
+                    backoff=2,
+                )
+            # deal with possible ConnectTimeout error
+            except ConnectTimeout as e:
                 logging.error(
-                    f"Error converting MMS ID {mms_id}, Holding ID {holding_id} to Pymarc."
+                    f"Connection timed out "
+                    f"while updating MMS ID {mms_id}, Holding ID {holding_id}: {e}"
                 )
                 errored_holdings_count += 1
                 errored_holdings.append({"MMS Id": mms_id, "Holding Id": holding_id})
                 continue
-            # get initial bytes for comparison later
-            initial_bytes = pymarc_record.as_marc()
-            # examine fields to see if any need to be removed
-            pymarc_966_fields = pymarc_record.get_fields("966")
-            pymarc_856_fields = pymarc_record.get_fields("856")
-            if not pymarc_966_fields and not pymarc_856_fields:
-                logging.info(
-                    f"No 966 or 856 found for MMS ID {mms_id}, Holding ID {holding_id}"
+            except APIError as e:
+                logging.error(
+                    f"AlmaAPIClient returned an error "
+                    f"while updating MMS ID {mms_id}, Holding ID {holding_id}: {e}"
                 )
-            else:
-                for field_966 in pymarc_966_fields:
-                    if needs_966_removed(field_966, bookplates_to_leave):
-                        pymarc_record.remove_field(field_966)
-                        logging.info(
-                            f"Removing 966 bookplate from MMS ID {mms_id}, "
-                            f"Holding ID {holding_id} ($a: {field_966.get_subfields('a')})"
-                        )
-                    else:
-                        logging.info(
-                            f"Not removing 966 bookplate from MMS ID {mms_id}, "
-                            f"Holding ID {holding_id} ($a: {field_966.get_subfields('a')})",
-                        )
-                for field_856 in pymarc_856_fields:
-                    if needs_856_removed(field_856):
-                        pymarc_record.remove_field(field_856)
-                        logging.info(
-                            f"Removing 856 bookplate from MMS ID {mms_id}, "
-                            f"Holding ID {holding_id} ($z: {field_856.get_subfields('z')})"
-                        )
-                    else:
-                        logging.info(
-                            f"Not removing 856 bookplate from MMS ID {mms_id}, "
-                            f"Holding ID {holding_id} ($z: {field_856.get_subfields('z')})",
-                        )
+                errored_holdings_count += 1
+                errored_holdings.append({"MMS Id": mms_id, "Holding Id": holding_id})
+                continue
+            # if we get here, the holding record was updated successfully
+            logging.info(f"Updated MMS ID {mms_id}, Holding ID {holding_id}")
+            updated_holdings_count += 1
 
-            # check if any changes were made,
-            # using bytes comparison to avoid object identity issues
-            updated_bytes = pymarc_record.as_marc()
-            if updated_bytes == initial_bytes:
-                logging.info(
-                    f"No changes made to MMS ID {mms_id}, Holding ID {holding_id}"
-                )
-                skipped_holdings_count += 1
-            else:
-                # add pymarc updates to holding record
-                alma_holding_record.marc_record = pymarc_record
-                # update holding record
-                try:
-                    retry_call(
-                        client.update_holding_record,
-                        fargs=(mms_id, alma_holding_record),
-                        tries=3,
-                        delay=20,
-                        backoff=2,
-                    )
-                # deal with possible ConnectTimeout error
-                except ConnectTimeout as e:
-                    logging.error(
-                        f"Error updating MMS ID {mms_id}, Holding ID {holding_id}: {e}"
-                    )
-                    errored_holdings_count += 1
-                    errored_holdings.append(
-                        {"MMS Id": mms_id, "Holding Id": holding_id}
-                    )
-                else:
-                    logging.info(f"Updated MMS ID {mms_id}, Holding ID {holding_id}")
-                    updated_holdings_count += 1
     logging.info("Finished Bookplate Updates")
     logging.info(f"Total Holdings Updated: {updated_holdings_count}")
     logging.info(f"Total Holdings Skipped: {skipped_holdings_count}")
