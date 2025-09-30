@@ -4,7 +4,7 @@ import logging
 import tomllib
 from pathlib import Path
 from datetime import datetime
-from alma_api_client import AlmaAPIClient, AlmaAnalyticsClient
+from alma_api_client import AlmaAPIClient, AlmaAnalyticsClient, APIError
 from pymarc import Field
 
 
@@ -29,13 +29,16 @@ def _get_arguments() -> argparse.Namespace:
         help="Path to config file with API keys",
     )
     parser.add_argument(
-        "--log-level",
+        "--log_level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="INFO",
         help="Set the logging level",
     )
     parser.add_argument(
-        "--start-index", type=int, help="Start processing report data at this index"
+        "--start_index", type=int, help="Start processing report data at this index"
+    )
+    parser.add_argument(
+        "--limit", type=int, help="Limit the number of records to process"
     )
     return parser.parse_args()
 
@@ -178,18 +181,12 @@ def update_bookplates(report: list, spac_mappings: list, client: AlmaAPIClient):
         bib_was_updated = False
 
         try:
-            # get bib from Alma
             alma_bib = client.get_bib_record(mms_id)
-            # check for error in bib response, usually due to invalid MMS ID
-            # TODO: update this once error-checking is added to AlmaAPIClient
-            if b"errorsExist" in alma_bib.alma_xml:
-                logging.error(
-                    f"Got an error finding bib record for MMS ID {mms_id}. Skipping this record."
-                )
-                total_bibs_errored += 1
-                continue
-        except ValueError as e:
-            logging.error(f"Error finding MMS ID {mms_id}, index {report_index}: {e}")
+        except APIError as e:
+            logging.error(
+                f"AlmaAPIClient returned an error "
+                f"while finding MMS ID {mms_id}, index {report_index}: {e}"
+            )
             total_bibs_errored += 1
             continue
         except Exception:
