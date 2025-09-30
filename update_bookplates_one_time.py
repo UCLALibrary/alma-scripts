@@ -176,12 +176,12 @@ def update_bookplates(report: list, spac_mappings: list, client: AlmaAPIClient):
     total_bibs_errored = 0
 
     for report_index, item in enumerate(report):
-
+        logging.info(f"Beginning processing {len(report)} bib e-bookplates")
         mms_id = item["MMS Id"]
         bib_was_updated = False
 
         try:
-            alma_bib = client.get_bib_record(mms_id)
+            alma_bib = client.get_bib_record(bib_id=mms_id)
         except APIError as e:
             logging.error(
                 f"AlmaAPIClient returned an error "
@@ -190,14 +190,13 @@ def update_bookplates(report: list, spac_mappings: list, client: AlmaAPIClient):
             total_bibs_errored += 1
             continue
         except Exception:
-            # if we get an Exception other than ValueError, halt the script.
+            # if we get an Exception other than APIError, halt the script.
             # Report is sorted by MMS ID, so we can use this to resume later if needed.
             logging.error(
                 f"Unexpected response for MMS ID {mms_id}, index {report_index}. Exiting."
             )
             exit()
 
-        # convert to Pymarc to handle fields and subfields
         pymarc_record = alma_bib.marc_record
         if not pymarc_record:
             logging.error(
@@ -219,7 +218,7 @@ def update_bookplates(report: list, spac_mappings: list, client: AlmaAPIClient):
 
         if bib_was_updated:
             alma_bib.marc_record = pymarc_record
-            client.update_bib_record(mms_id, alma_bib)
+            client.update_bib_record(bib_id=mms_id, bib_record=alma_bib)
             total_bibs_updated += 1
         else:
             # this case shouldn't happen, since report is limited to records that need updating
@@ -266,7 +265,6 @@ def main():
     client = AlmaAPIClient(alma_api_key)
     spac_mappings = get_spac_mappings(args.spac_mappings_file)
 
-    logging.info(f"Beginning processing {len(report)} bib e-bookplates")
     update_bookplates(report, spac_mappings, client)
 
 
