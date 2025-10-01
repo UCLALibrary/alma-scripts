@@ -6,7 +6,7 @@ import tomllib
 from pathlib import Path
 from datetime import datetime
 from alma_api_client import AlmaAPIClient, AlmaAnalyticsClient, APIError
-from pymarc import Field, Record, Subfield
+from pymarc import Field, Record, Subfield, Indicators
 
 
 def _get_arguments() -> argparse.Namespace:
@@ -26,7 +26,7 @@ def _get_arguments() -> argparse.Namespace:
         "--config_file",
         type=str,
         default="secret_config.toml",
-        help="Path to config file with API keys",
+        help="Path to TOML config file with API keys",
     )
     parser.add_argument(
         "--start_index", type=int, help="Start processing report data at this index"
@@ -198,7 +198,7 @@ def add_new_966(record: Record, spac_code: str, spac_name: str, spac_url: str) -
     record.add_field(
         Field(
             tag="966",
-            indicators=[" ", " "],
+            indicators=Indicators("", ""),
             subfields=subfields,
         )
     )
@@ -269,6 +269,12 @@ def add_bookplates(
 
         # Get pymarc record from Alma bib
         pymarc_record = alma_bib.marc_record
+
+        # If pymarc_record is None, log error and skip to next record
+        if pymarc_record is None:
+            logging.error(f"No MARC record found for MMS ID {mms_id}. Skipping.")
+            total_bibs_errored += 1
+            continue
 
         if is_new_966(pymarc_record, spac_code):
             add_new_966(pymarc_record, spac_code, spac_name, spac_url)
