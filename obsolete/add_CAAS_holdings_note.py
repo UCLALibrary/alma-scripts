@@ -170,7 +170,14 @@ def update_holdings(client: AlmaAPIClient, report_data: list) -> None:
             continue
 
         # Should only be one 852 field in input data
-        pymarc_852 = pymarc_record.get_fields("852")[0]
+        pymarc_852 = pymarc_record.get("852")
+        if not pymarc_852:
+            logging.error(
+                f"No 852 field found for MMS ID {mms_id}, Holding ID {holding_id}"
+            )
+            errored_holdings_count += 1
+            continue
+
         public_note = "Reading Room Use ONLY."  # Add this note to the 852 $z subfield
         position = get_subfield_position(pymarc_852, "z")
         pymarc_852.add_subfield(
