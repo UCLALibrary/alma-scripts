@@ -119,6 +119,11 @@ def get_holdings_report(analytics_api_key: str) -> list:
 def get_subfield_position(field: Field, subfield_code: str) -> int | None:
     """Return 0-based position of the first subfield with the given code,
     or None if not found.
+
+    :param field: The Pymarc Field to search.
+    :param subfield_code: The subfield code to search for.
+    :return: The 0-based position of the first subfield with the given code,
+        or None if not found.
     """
     found = False
     pos = -1
