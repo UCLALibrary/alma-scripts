@@ -52,3 +52,6 @@ To run tests (if any...):
 ```
 $ docker compose exec dev python -m unittest
 ```
+
+### Obsolete folder
+The `obsolete` sub-directory contains scripts that were written as one-offs or were otherwise made obsolete, but are useful to keep around as examples.
