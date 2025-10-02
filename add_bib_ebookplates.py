@@ -16,10 +16,15 @@ def _get_arguments() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "spac_mappings_file", help="Path to the SPAC mappings .csv file"
+        "--spac_mappings_file",
+        type=str,
+        required=True,
+        help="Path to the SPAC mappings .csv file",
     )
     parser.add_argument(
-        "environment",
+        "--environment",
+        choices=["sandbox", "production", "test"],
+        required=True,
         help="Alma environment (sandbox or production), or 'test' for a small test set.",
     )
     parser.add_argument(
@@ -90,7 +95,7 @@ def get_fund_code_report(analytics_api_key: str) -> list:
     try:
         report = aac.get_report()
     except APIError as e:
-        logging.error(f"AlmaAnalyticsClient returned an error: {e}")
+        logging.error(f"AlmaAnalyticsClient returned an error: {e.error_messages}")
         exit()
     return report
 
@@ -255,7 +260,7 @@ def add_bookplates(
         except APIError as e:
             logging.error(
                 f"AlmaAPIClient returned an error "
-                f"while finding MMS ID {mms_id}, index {report_index}: {e}"
+                f"while finding MMS ID {mms_id}, index {report_index}: {e.error_messages}"
             )
             total_bibs_errored += 1
             continue
@@ -263,7 +268,8 @@ def add_bookplates(
             # if we get an Exception other than APIError, halt the script.
             # Report is sorted by MMS ID, so we can use this to resume later if needed.
             logging.error(
-                f"Unexpected response for MMS ID {mms_id}, index {report_index}. Exiting."
+                f"Unexpected response for MMS ID {mms_id}, index {report_index}. Exiting. ",
+                f"Error message: {Exception}",
             )
             exit()
 
@@ -322,6 +328,11 @@ def main() -> None:
     config = _get_config(args.config_file)
     _configure_logging(args.log_level)
 
+    # initialize variables for report_data and API keys
+    report_data = []
+    analytics_api_key = ""
+    alma_api_key = ""
+
     if args.environment == "test":
         # test data for sandbox environment
         # these MMS IDs are real, but fund codes are fake to align with test SPAC mappings file
@@ -344,12 +355,6 @@ def main() -> None:
         analytics_api_key = config["alma_api_keys"]["DIIT_ANALYTICS"]
         alma_api_key = config["alma_api_keys"]["DIIT_SCRIPTS"]
         report_data = get_fund_code_report(analytics_api_key)
-
-    else:
-        logging.error(
-            "Invalid environment argument. Must be 'test', 'sandbox', or 'production'."
-        )
-        exit()
 
     # if a start index is provided, slice the report to start at that index
     if args.start_index is not None:
