@@ -2,28 +2,111 @@ import csv
 import copy
 import argparse
 import logging
-from alma_api_keys import API_KEYS
-from alma_api_client import AlmaAPIClient
-from alma_analytics_client import AlmaAnalyticsClient
-from alma_marc import get_pymarc_record_from_bib, prepare_bib_for_update
-from pymarc import Field, Record, Subfield
+import tomllib
+from pathlib import Path
+from datetime import datetime
+from alma_api_client import AlmaAPIClient, AlmaAnalyticsClient, APIError
+from pymarc import Field, Record, Subfield, Indicators
+
+
+def _get_arguments() -> argparse.Namespace:
+    """Parse command line arguments.
+
+    :return: Parsed arguments as a Namespace object.
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--spac_mappings_file",
+        type=str,
+        required=True,
+        help="Path to the SPAC mappings .csv file",
+    )
+    parser.add_argument(
+        "--environment",
+        choices=["sandbox", "production", "test"],
+        required=True,
+        help="Alma environment (sandbox or production), or 'test' for a small test set.",
+    )
+    parser.add_argument(
+        "--config_file",
+        type=str,
+        default="secret_config.toml",
+        help="Path to TOML config file with API keys",
+    )
+    parser.add_argument(
+        "--start_index", type=int, help="Start processing report data at this index"
+    )
+    parser.add_argument(
+        "--limit", type=int, help="Limit the number of records processed"
+    )
+    parser.add_argument(
+        "--log_level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Set the logging level",
+    )
+    return parser.parse_args()
+
+
+def _get_config(config_file_name: str) -> dict:
+    """Returns configuration for this program, loaded from TOML file.
+
+    :param config_file_name: Path to the configuration file.
+    :return: Configuration dictionary.
+    """
+
+    with open(config_file_name, "rb") as f:
+        config = tomllib.load(f)
+    return config
+
+
+def _configure_logging(log_level: str):
+    """Returns a logger for the current application.
+    A unique log filename is created using the current time, and log messages
+    will use the name in the 'logger' field.
+
+    :param log_level: Log level to use
+    """
+    name = Path(__file__).stem
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    logging_file = Path("logs", f"{name}_{timestamp}.log")  # Log to `logs/` dir
+    logging_file.parent.mkdir(parents=True, exist_ok=True)  # Make `logs/` dir, if none
+    logging.basicConfig(
+        filename=logging_file,
+        level=log_level,
+        format="%(asctime)s %(levelname)s: %(message)s",
+    )
+    # always suppress urllib3 logs with lower level than WARNING
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 def get_fund_code_report(analytics_api_key: str) -> list:
-    """Get the report of MMS IDs and fund codes from Alma Analytics."""
-    # analytics only available in prod environment
+    """Get the report of MMS IDs and fund codes from Alma Analytics.
+
+    :param analytics_api_key: API key for Alma Analytics
+    :return: List of dicts with report data
+    """
     aac = AlmaAnalyticsClient(analytics_api_key)
     report_path = (
         "/shared/University of California Los Angeles (UCLA) 01UCS_LAL"
         "/Acquisitions/Reports/API/MMS ID by SPAC"
     )
     aac.set_report_path(report_path)
-    report = aac.get_report()
+    try:
+        report = aac.get_report()
+    except APIError as e:
+        logging.error(f"AlmaAnalyticsClient returned an error: {e.error_messages}")
+        exit()
     return report
 
 
 def get_report_ebookplates(report: list, input_file: str) -> list:
-    """Add SPAC ebookplate info to each item in the report."""
+    """Add SPAC ebookplate info to each item in the report.
+
+    :param report: List of dicts with report data
+    :param input_file: Path to the SPAC mappings .csv file
+    :return: New list of dicts with SPAC info added
+    """
     # copy SPAC mappings into list of dicts for looping over
     spac_mappings = []
     with open(input_file, newline="", encoding="utf-8-sig") as csv_file:
@@ -57,7 +140,12 @@ def get_report_ebookplates(report: list, input_file: str) -> list:
 
 
 def is_new_966(old_record: Record, spac_code: str) -> bool:
-    """Check all 966 fields in a record to see if a new 966 field is needed."""
+    """Check all 966 fields in a record to see if a new 966 field is needed.
+
+    :param old_record: pymarc Record object
+    :param spac_code: SPAC code to check for in existing 966 fields
+    :return: True if no existing 966 field matches the SPAC code, False otherwise
+    """
     for field_966 in old_record.get_fields("966"):
         # match only subfield a
         if spac_code in field_966.get_subfields("a"):
@@ -68,7 +156,14 @@ def is_new_966(old_record: Record, spac_code: str) -> bool:
 def needs_bookplate_update(
     old_field: Field, spac_code: str, spac_name: str, spac_url: str
 ) -> bool:
-    """Check if a 966 field matches the SPAC code, but needs an update to URL or name."""
+    """Check if a 966 field matches the SPAC code, but needs an update to URL or name.
+
+    :param old_field: pymarc Field object for the existing 966 field
+    :param spac_code: SPAC code to check for in existing 966 field
+    :param spac_name: SPAC name to check for in existing 966 field
+    :param spac_url: SPAC URL to check for in existing 966 field
+    :return: True if the existing 966 field needs an update, False otherwise
+    """
     # First, match on subfield a. If no match, this field doesn't need updating.
     # get_subfields returns a list, we expect only one $a,b,c per 966 field
     if spac_code != old_field.get_subfields("a")[0]:
@@ -87,10 +182,18 @@ def needs_bookplate_update(
     # Now check if the bookplate text needs updating
     if spac_name != old_field.get_subfields("b")[0]:
         return True
+    # Otherwise, no update is needed
+    return False
 
 
 def add_new_966(record: Record, spac_code: str, spac_name: str, spac_url: str) -> None:
-    """Add a new 966 field to a pymarc record, with SPAC and bookplate data."""
+    """Add a new 966 field to a pymarc record, with SPAC and bookplate data.
+
+    :param record: pymarc Record object
+    :param spac_code: SPAC code to add in subfield a
+    :param spac_name: SPAC name to add in subfield b
+    :param spac_url: SPAC URL to add in subfield c (if not empty)
+    """
     subfields = []
     subfields.append(Subfield(code="a", value=spac_code))
     subfields.append(Subfield(code="b", value=spac_name))
@@ -100,14 +203,19 @@ def add_new_966(record: Record, spac_code: str, spac_name: str, spac_url: str) -
     record.add_field(
         Field(
             tag="966",
-            indicators=[" ", " "],
+            indicators=Indicators("", ""),
             subfields=subfields,
         )
     )
 
 
 def update_existing_966(field_966: Field, spac_name: str, spac_url: str) -> None:
-    """Update the URL and bookplate text in an existing 966 field."""
+    """Update the URL and bookplate text in an existing 966 field.
+
+    :param field_966: pymarc Field object for the existing 966 field
+    :param spac_name: SPAC name to update in subfield b
+    :param spac_url: SPAC URL to update in subfield c (if not empty)
+    """
     # update $b for bookplate text
     field_966.delete_subfield("b")
     field_966.add_subfield("b", spac_name)
@@ -118,61 +226,19 @@ def update_existing_966(field_966: Field, spac_name: str, spac_url: str) -> None
         field_966.add_subfield("c", spac_url)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "spac_mappings_file", help="Path to the SPAC mappings .csv file"
-    )
-    parser.add_argument(
-        "environment",
-        help="Alma environment (sandbox or production), or 'test' for a small test set.",
-    )
-    parser.add_argument(
-        "--start-index", type=int, help="Start processing report data at this index"
-    )
-    parser.add_argument(
-        "--log-level",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default="INFO",
-        help="Set the logging level",
-    )
-    args = parser.parse_args()
+def add_bookplates(
+    report_data: list, alma_api_key: str, spac_mappings_file: str
+) -> None:
+    """Main function to add ebookplates to bib records based on fund codes.
 
-    logging.basicConfig(filename="add_bib_ebookplates.log", level=args.log_level)
-    # always suppress urllib3 logs with lower level than WARNING
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-
-    if args.environment == "test":
-        # test data for sandbox environment
-        # these MMS IDs are real, but fund codes are fake to align with test SPAC mappings file
-        report_data = [
-            # case 1: SPAC1, with URL
-            {"MMS Id": "9911656853606533", "Fund Code": "FUND2A"},
-            # case 2: SPAC3, no URL
-            {"MMS Id": "9990572683606533", "Fund Code": "FUND3"},
-        ]
-        alma_api_key = API_KEYS["SANDBOX"]
-
-    elif args.environment == "sandbox":
-        # use production analytics key for sandbox environment, since sandbox doesn't have analytics
-        analytics_api_key = API_KEYS["DIIT_ANALYTICS"]
-        alma_api_key = API_KEYS["SANDBOX"]
-        report_data = get_fund_code_report(analytics_api_key)
-
-    elif args.environment == "production":
-        analytics_api_key = API_KEYS["DIIT_ANALYTICS"]
-        alma_api_key = API_KEYS["DIIT_SCRIPTS"]
-        report_data = get_fund_code_report(analytics_api_key)
-
-    # if a start index is provided, slice the report to start at that index
-    if args.start_index:
-        report_data = report_data[args.start_index :]
+    :param report_data: List of dicts with report data
+    :param alma_api_key: API key for Alma
+    :param spac_mappings_file: Path to the SPAC mappings .csv file
+    """
 
     logging.info(f"Beginning processing {len(report_data)} bib e-bookplates")
 
-    report_with_ebookplates = get_report_ebookplates(
-        report_data, args.spac_mappings_file
-    )
+    report_with_ebookplates = get_report_ebookplates(report_data, spac_mappings_file)
 
     client = AlmaAPIClient(alma_api_key)
 
@@ -181,7 +247,7 @@ def main():
     total_bibs_skipped = 0
     total_bibs_errored = 0
 
-    for item in report_with_ebookplates:
+    for report_index, item in enumerate(report_with_ebookplates):
         mms_id = item["MMS Id"]
         spac_code = item["spac_code"]
         spac_name = item["spac_name"]
@@ -189,17 +255,32 @@ def main():
         bib_was_updated = False
 
         # get bib from Alma
-        alma_bib = client.get_bib(mms_id).get("content")
-        # check for error in bib response, usually due to invalid MMS ID
-        if b"errorsExist" in alma_bib:
+        try:
+            alma_bib = client.get_bib_record(bib_id=mms_id)
+        except APIError as e:
             logging.error(
-                f"Got an error finding bib record for MMS ID {mms_id}. Skipping this record."
+                f"AlmaAPIClient returned an error "
+                f"while finding MMS ID {mms_id}, index {report_index}: {e.error_messages}"
             )
             total_bibs_errored += 1
             continue
+        except Exception:
+            # if we get an Exception other than APIError, halt the script.
+            # Report is sorted by MMS ID, so we can use this to resume later if needed.
+            logging.error(
+                f"Unexpected response for MMS ID {mms_id}, index {report_index}. Exiting. ",
+                f"Error message: {Exception}",
+            )
+            exit()
 
-        # convert to Pymarc to handle fields and subfields
-        pymarc_record = get_pymarc_record_from_bib(alma_bib)
+        # Get pymarc record from Alma bib
+        pymarc_record = alma_bib.marc_record
+
+        # If pymarc_record is None, log error and skip to next record
+        if pymarc_record is None:
+            logging.error(f"No MARC record found for MMS ID {mms_id}. Skipping.")
+            total_bibs_errored += 1
+            continue
 
         if is_new_966(pymarc_record, spac_code):
             add_new_966(pymarc_record, spac_code, spac_name, spac_url)
@@ -217,8 +298,8 @@ def main():
                     bib_was_updated = True
 
         if bib_was_updated:
-            new_alma_bib = prepare_bib_for_update(alma_bib, pymarc_record)
-            client.update_bib(mms_id, new_alma_bib)
+            alma_bib.marc_record = pymarc_record
+            client.update_bib_record(bib_id=mms_id, bib_record=alma_bib)
             total_bibs_updated += 1
         else:
             total_bibs_skipped += 1
@@ -239,6 +320,52 @@ def main():
     logging.info(f"{total_bibs_updated} bibs updated.")
     logging.info(f"{total_bibs_skipped} bibs skipped with no 966 updates needed.")
     logging.info(f"{total_bibs_errored} bibs skipped due to errors.")
+
+
+def main() -> None:
+    """Main function to run the script."""
+    args = _get_arguments()
+    config = _get_config(args.config_file)
+    _configure_logging(args.log_level)
+
+    # initialize variables for report_data and API keys
+    report_data = []
+    analytics_api_key = ""
+    alma_api_key = ""
+
+    if args.environment == "test":
+        # test data for sandbox environment
+        # these MMS IDs are real, but fund codes are fake to align with test SPAC mappings file
+        # test file is in repo at tests/data/sample_SPAC_mappings.csv
+        report_data = [
+            # case 1: SPAC1, with URL
+            {"MMS Id": "9911656853606533", "Fund Code": "FUND2A"},
+            # case 2: SPAC3, no URL
+            {"MMS Id": "9990572683606533", "Fund Code": "FUND3"},
+        ]
+        alma_api_key = config["alma_api_keys"]["SANDBOX"]
+
+    elif args.environment == "sandbox":
+        # use production analytics key for sandbox environment, since sandbox doesn't have analytics
+        analytics_api_key = config["alma_api_keys"]["DIIT_ANALYTICS"]
+        alma_api_key = config["alma_api_keys"]["SANDBOX"]
+        report_data = get_fund_code_report(analytics_api_key)
+
+    elif args.environment == "production":
+        analytics_api_key = config["alma_api_keys"]["DIIT_ANALYTICS"]
+        alma_api_key = config["alma_api_keys"]["DIIT_SCRIPTS"]
+        report_data = get_fund_code_report(analytics_api_key)
+
+    # if a start index is provided, slice the report to start at that index
+    if args.start_index is not None:
+        report_data = report_data[args.start_index :]
+
+    # if a limit is provided, slice the report to that limit
+    if args.limit is not None:
+        report_data = report_data[: args.limit]
+
+    spac_mappings_file = args.spac_mappings_file
+    add_bookplates(report_data, alma_api_key, spac_mappings_file)
 
 
 if __name__ == "__main__":
