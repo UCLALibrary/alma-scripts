@@ -9,7 +9,7 @@ def _get_arguments() -> argparse.Namespace:
 
     :return: Parsed arguments for program as a Namespace object.
     """
-    parser = argparse.ArgumentParser(description="Update bookplates in Alma.")
+    parser = argparse.ArgumentParser(description="Run Caia request export job.")
     parser.add_argument(
         "--production",
         action="store_true",
@@ -20,12 +20,6 @@ def _get_arguments() -> argparse.Namespace:
         type=str,
         default="secret_config.toml",
         help="Path to config file with API keys",
-    )
-    parser.add_argument(
-        "--log_level",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default="INFO",
-        help="Set the logging level",
     )
     return parser.parse_args()
 
