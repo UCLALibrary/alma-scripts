@@ -265,13 +265,16 @@ def _write_invoice_to_file(pac_invoice, pac_filename) -> None:
         f.writelines(pac_invoice)
 
 
-def create_pac_invoices(xml_file: str, dump_invoices: bool):
+def create_pac_invoices(
+    xml_file: str, dump_invoices: bool, production_mode: bool = False
+):
     """Create PAC (UCLA accounting) invoices from Alma XML invoices.
 
     :param xml_file: Name of the XML file containing Alma invoices.
     :param dump_invoices: Whether to dump invoices (to stdout) as Python dictionaries for debugging.
+    :param production_mode: Whether to run this in production mode. By default, this is False,
+    meaning invoices will be converted and validated, but not written to file or uploaded to PAC.
     """
-    PROD = True
     pac_file = _get_pac_filename()
     if os.path.exists(pac_file):
         os.remove(pac_file)
@@ -282,21 +285,23 @@ def create_pac_invoices(xml_file: str, dump_invoices: bool):
     for alma_invoice in root.findall(".//alma:invoice", ns):
         try:
             invoice = Invoice(alma_invoice, ns)
-            # _inject_test_number(invoice, '-2')
 
             if dump_invoices:
                 invoice.dump()
 
-            if PROD:
+            if production_mode:
                 if invoice.is_valid():
                     _write_invoice_to_file(invoice.get_pac_format(), pac_file)
             else:
-                # TODO: Changes to is_valid()
+                # TODO: Cleanup, but requires changing internals of Invoice()
                 invoice.is_valid()
-            # TODO: Real logging
+            # Whether production or not, print message set by invoice.is_valid().
             print(invoice.data["validation_message"])
 
         # TODO: What actual exceptions are relevant?
+        # Presumably xml.etree.ElementTree.ParseError could be raised in the actual
+        # Invoice() parsing; that all needs review and refactoring.
+        # For now (20251014/akohler) this is acceptable.
         except Exception as ex:
             bad_invoice_number = alma_invoice.findtext("alma:invoice_number", None, ns)
             print(ex)
@@ -332,10 +337,13 @@ def main():
 
     if args.production:
         alma_api_key = config["alma_api_keys"]["DIIT_SCRIPTS"]
+        production_mode = True
     else:  # default to sandbox
         print("Using SANDBOX")
         alma_api_key = config["alma_api_keys"]["SANDBOX"]
-        # TODO: Other sandbox-specific settings?
+        # Override skip_upload: data from Alma Sandbox should not go to PAC.
+        args.skip_upload = False
+        production_mode = False
 
     # If xml_file is passed via command-line, use it;
     # otherwise, extract Alma invoices and retrieve xml_file from server.
@@ -347,7 +355,9 @@ def main():
 
     # Creates PAC file and returns its name
     if xml_file:
-        pac_file = create_pac_invoices(xml_file, args.dump_invoices)
+        pac_file = create_pac_invoices(
+            xml_file, dump_invoices=args.dump_invoices, production_mode=production_mode
+        )
         # Upload PAC file to UCLA ITS sftp server
         if args.skip_upload:
             print(f"{pac_file} NOT uploaded")
