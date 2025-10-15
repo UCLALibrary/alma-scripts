@@ -255,7 +255,7 @@ def _get_pac_filename() -> str:
     return pac_filename
 
 
-def _write_invoice_to_file(pac_invoice, pac_filename) -> None:
+def _write_invoice_to_file(pac_invoice: str, pac_filename: str) -> None:
     """Append the data for a PAC invoice to a file.
 
     :param pac_invoice: The data for one invoice, in PAC form.
