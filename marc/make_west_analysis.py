@@ -157,26 +157,30 @@ def keep_record(record: Record) -> bool:
     keep = True
 
     # For logging
-    mms_id = record["001"].data
+    # mms_id = record["001"].data
 
     # Reject based on various 008 values, all of which are for
     # continuing resources only (one of the Alma extract filters).
     field_008 = record["008"].data
 
-    # Reject based on 008/23: non-print not wanted.
-    form_of_item = field_008[23]
-    if form_of_item not in [" ", "d", "p"]:
-        keep = False
+    if field_008:
+        # Reject based on 008/23: non-print not wanted.
+        form_of_item = field_008[23]
+        if form_of_item not in [" ", "d", "p"]:
+            keep = False
 
-    # Reject based on 008/28: gov pubs not wanted.
-    government_publication = field_008[28]
-    if government_publication not in [" ", "u", "|"]:
+        # Reject based on 008/28: gov pubs not wanted.
+        government_publication = field_008[28]
+        if government_publication not in [" ", "u", "|"]:
+            keep = False
+    else:
+        # No 008, can't evaluate the record.
         keep = False
 
     # Reject if there's an 074 or 086:
     # government publications not caught via 008/28.
     # As of 202311, this finds no records - still needed?
-    if record["074"] or record["086"]:
+    if record.get("074") or record.get("086"):
         keep = False
 
     # Reject based on location code: H52 $c (holdings 852, embedded in MARC record)
