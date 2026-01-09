@@ -16,6 +16,7 @@ with ucla_people as (
         select max(EFFDT)
         from PS_UC_EXT_SYSTEM
         where EMPLID = es.EMPLID
+        and UC_EXT_SYSTEM = 'UCLA_UID'
         and BUSINESS_UNIT in ('LACMP', 'LAMED')
         and DML_IND <> 'D'
         and EFFDT <= {fn curDaTe()}
