@@ -1,6 +1,7 @@
 import csv
 import sys
 from dateutil import parser
+from xml.sax.saxutils import escape
 
 
 def get_xml_header() -> str:
@@ -37,9 +38,10 @@ def get_xml_invoice(row: dict) -> str:
     # dict_keys(['Vendor Code', 'Invoice Number',
     # 'Invoice Date', 'Invoice Gross Amount', 'Transaction Amount',
     # 'Check Number', 'Check Date'])
-    vendor_code = row["Vendor Code"]
+    # Some fields may contain ampersands and need XML escaping.
+    vendor_code = escape(row["Vendor Code"])
     # These have trailing spaces and non-breaking spaces
-    invoice_number = row["Invoice Number"].strip()
+    invoice_number = escape(row["Invoice Number"].strip())
     invoice_date = get_yyyymmdd(row["Invoice Date"])
     check_number = row["Check Number"]
     check_date = get_yyyymmdd(row["Check Date"])
