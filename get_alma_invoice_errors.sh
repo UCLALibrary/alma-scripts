@@ -4,7 +4,7 @@
 
 # Get file from SFTP server using python, since native sftp
 # client has no(?) support for password auth via command line.
-/home/exlsupport/alma-scripts/get_alma_invoice_errors.py
+python /home/exlsupport/alma-scripts/get_alma_invoice_errors.py
 
 echo "======================================================"
 
