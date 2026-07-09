@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 from sftp_credentials import PAC
 import pysftp
 
